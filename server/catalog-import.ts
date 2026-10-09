@@ -43,7 +43,11 @@ const columns: Record<string, keyof CatalogRow> = {
   descripcion: "description",
   description: "description",
 };
-export function catalogFromCells(cells: string[][]) {
+export type ImportMode = "MIXED" | "SERVICE" | "PRODUCT";
+export function catalogFromCells(
+  cells: string[][],
+  mode: ImportMode = "MIXED",
+) {
   if (cells.length < 2)
     throw new AppError(
       "El archivo debe tener encabezados y al menos un artículo.",
@@ -68,17 +72,25 @@ export function catalogFromCells(cells: string[][]) {
       const key = columns[h];
       if (key && values[i]?.trim()) raw[key] = values[i].trim();
     });
-    const type = normalize(raw.type || "tratamiento");
+    const type = normalize(
+      raw.type || (mode === "PRODUCT" ? "producto" : "tratamiento"),
+    );
     raw.type = ["producto", "cosmetico", "product"].includes(type)
       ? "PRODUCT"
       : ["tratamiento", "paquete", "servicio", "service"].includes(type)
         ? "SERVICE"
         : raw.type;
+    if (mode !== "MIXED" && raw.type !== mode) {
+      errors.push(
+        `Fila ${index + 2}: el tipo no coincide con la importación seleccionada. Usa un archivo separado o elige Catálogo completo.`,
+      );
+      continue;
+    }
     raw.currency = (raw.currency || "NIO").toUpperCase();
-    const mode = normalize(raw.pricingMode || "fijo");
-    raw.pricingMode = ["unidad", "porunidad", "perunit"].includes(mode)
+    const pricingMode = normalize(raw.pricingMode || "fijo");
+    raw.pricingMode = ["unidad", "porunidad", "perunit"].includes(pricingMode)
       ? "PER_UNIT"
-      : ["fijo", "fixed"].includes(mode)
+      : ["fijo", "fixed"].includes(pricingMode)
         ? "FIXED"
         : raw.pricingMode;
     raw.price = (raw.price || "").replace(",", ".");
@@ -109,7 +121,7 @@ export function catalogFromCells(cells: string[][]) {
     throw new AppError("El archivo no contiene artículos.");
   return { rows, errors };
 }
-export async function parseCatalogFile(file: File) {
+export async function parseCatalogFile(file: File, mode: ImportMode = "MIXED") {
   if (file.size > 5 * 1024 * 1024)
     throw new AppError("El archivo admite máximo 5 MB.");
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -145,7 +157,7 @@ export async function parseCatalogFile(file: File) {
     }
     cells.push(values);
   });
-  return catalogFromCells(cells);
+  return catalogFromCells(cells, mode);
 }
 export async function importCatalog(ctx: Context, input: unknown) {
   authorize(ctx);

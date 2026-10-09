@@ -94,9 +94,13 @@ export function ClinicSale({ options }: { options: Options }) {
       (category === "ALL" ||
         (category === "PACKAGES"
           ? p.type === "SERVICE" && (p.sessions || 1) > 1
-          : category === "SERVICE"
-            ? p.type === "SERVICE" && (p.sessions || 1) === 1
-            : p.type === "PRODUCT")) &&
+          : category === "LASER"
+            ? p.type === "SERVICE" && /l[aá]ser/i.test(p.category || "")
+            : category === "AESTHETIC"
+              ? p.type === "SERVICE" && /est[eé]tic/i.test(p.category || "")
+              : category === "SERVICE"
+                ? p.type === "SERVICE" && (p.sessions || 1) === 1
+                : p.type === "PRODUCT")) &&
       `${p.name} ${p.category || ""}`
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
@@ -182,7 +186,7 @@ export function ClinicSale({ options }: { options: Options }) {
         );
       setSaved(document);
       setRetryPending(false);
-      toast.success("Venta guardada y cliente registrado");
+      toast.success("Factura guardada y cliente registrado");
     } catch (error) {
       toast.error((error as Error).message);
       setRetryPending(Boolean(submission.current));
@@ -198,7 +202,7 @@ export function ClinicSale({ options }: { options: Options }) {
           <div className="flex gap-3 items-center">
             <CheckCircle2 className="text-emerald-700" size={32} />
             <div>
-              <h1 className="text-xl font-semibold">Venta guardada</h1>
+              <h1 className="text-xl font-semibold">Factura guardada</h1>
               <p className="text-sm text-slate-500 mt-1">
                 {saved.documentNumber} · {saved.customer?.name}
               </p>
@@ -226,7 +230,7 @@ export function ClinicSale({ options }: { options: Options }) {
                 router.refresh();
               }}
             >
-              Nueva venta
+              Nueva factura
             </Button>
           </div>
         </div>
@@ -251,7 +255,9 @@ export function ClinicSale({ options }: { options: Options }) {
           <p className="text-xs font-semibold tracking-widest text-emerald-700 mb-2">
             CLÍNICA Y COSMÉTICOS
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Nueva venta</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Nueva factura
+          </h1>
           <p className="text-sm text-slate-500 mt-2">
             Elige, cobra y entrega el comprobante. Todo aquí.
           </p>
@@ -289,6 +295,8 @@ export function ClinicSale({ options }: { options: Options }) {
                 {[
                   { id: "ALL", label: "Todo" },
                   { id: "SERVICE", label: "Tratamientos" },
+                  { id: "AESTHETIC", label: "Estéticos" },
+                  { id: "LASER", label: "Láser" },
                   { id: "PACKAGES", label: "Paquetes" },
                   { id: "PRODUCT", label: "Cosméticos" },
                 ].map((t) => (

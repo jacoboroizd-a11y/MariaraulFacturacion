@@ -2,6 +2,35 @@ import { describe, test, expect } from "vitest";
 import ExcelJS from "exceljs";
 import { catalogFromCells, parseCatalogFile } from "../server/catalog-import";
 describe("importación de catálogo", () => {
+  test("importación separada distingue inventario de tratamientos sin columna tipo", () => {
+    const cells = [
+      ["nombre", "precio", "existencias"],
+      ["Crema", "50", "12"],
+    ];
+    expect(catalogFromCells(cells, "PRODUCT").rows[0]).toMatchObject({
+      type: "PRODUCT",
+      stock: 12,
+      price: "50",
+    });
+    expect(
+      catalogFromCells(
+        [
+          ["nombre", "precio", "sesiones"],
+          ["Facial", "300", "3"],
+        ],
+        "SERVICE",
+      ).rows[0],
+    ).toMatchObject({ type: "SERVICE", sessions: 3 });
+    const wrongType = catalogFromCells(
+      [
+        ["nombre", "precio", "tipo"],
+        ["Facial", "300", "tratamiento"],
+      ],
+      "PRODUCT",
+    );
+    expect(wrongType.rows).toHaveLength(0);
+    expect(wrongType.errors[0]).toContain("no coincide");
+  });
   test("encabezados en español, precio decimal y unidades", () => {
     const result = catalogFromCells([
       ["Nombre", "Tipo", "Precio por unidad", "Cobro"],

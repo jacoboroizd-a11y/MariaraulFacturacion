@@ -192,7 +192,7 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
           <span>Desde</span>
           <Input
             type="date"
-            className="w-36 h-8"
+            className="w-40 h-11"
             aria-label="Fecha desde"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
@@ -200,25 +200,29 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
           <span>hasta</span>
           <Input
             type="date"
-            className="w-36 h-8"
+            className="w-40 h-11"
             aria-label="Fecha hasta"
             value={to}
             onChange={(e) => setTo(e.target.value)}
           />
           <Input
-            className="w-28 h-8"
+            className="w-40 h-11"
             type="number"
+            inputMode="decimal"
+            step="0.01"
             min="0"
-            placeholder="Monto mín."
+            placeholder="Monto mínimo"
             aria-label="Monto mínimo"
             value={min}
             onChange={(e) => setMin(e.target.value)}
           />
           <Input
-            className="w-28 h-8"
+            className="w-40 h-11"
             type="number"
+            inputMode="decimal"
+            step="0.01"
             min="0"
-            placeholder="Monto máx."
+            placeholder="Monto máximo"
             aria-label="Monto máximo"
             value={max}
             onChange={(e) => setMax(e.target.value)}

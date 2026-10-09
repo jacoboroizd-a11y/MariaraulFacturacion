@@ -1,4 +1,7 @@
 import "dotenv/config";
+import ExcelJS from "exceljs";
+import { clinicReport } from "../server/clinic-report";
+import { monthRange } from "../server/clinic-overview";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "../server/db";
@@ -345,6 +348,44 @@ async function main() {
       })
     ).sessionsUsed === 1,
     "Sesión repetida no se descuenta dos veces",
+  );
+  const reportBook = new ExcelJS.Workbook();
+  await reportBook.xlsx.load(
+    Buffer.from(await clinicReport(ctx, todayString().slice(0, 7))) as never,
+  );
+  const sessionRows = reportBook.getWorksheet("Sesiones realizadas")!;
+  check(
+    sessionRows.rowCount === 2 &&
+      sessionRows.getCell("C2").text === "Cliente automático" &&
+      sessionRows.getCell("G2").value === 1,
+    "Reporte mensual incluye paciente y sesión realizada sin duplicar reintentos",
+  );
+  const otherBook = new ExcelJS.Workbook();
+  await otherBook.xlsx.load(
+    Buffer.from(await clinicReport(other, todayString().slice(0, 7))) as never,
+  );
+  check(
+    !otherBook
+      .getWorksheet("Sesiones realizadas")!
+      .getColumn(3)
+      .values.includes("Cliente automático"),
+    "Reporte de tratamientos aislado por empresa",
+  );
+  const historicalBook = new ExcelJS.Workbook();
+  await historicalBook.xlsx.load(
+    Buffer.from(await clinicReport(ctx, "2000-01")) as never,
+  );
+  check(
+    historicalBook.getWorksheet("Sesiones realizadas")!.rowCount === 1,
+    "Reporte respeta el mes seleccionado",
+  );
+  await rejected(
+    () => clinicReport(ctx, "2026-13"),
+    "Reporte rechaza mes inválido",
+  );
+  check(
+    monthRange("2026-10").from.toISOString() === "2026-10-01T06:00:00.000Z",
+    "Reporte aplica límite mensual de Nicaragua",
   );
   await rejected(
     () => recordSession(other, savedItems[0].id, { requestId: randomUUID() }),

@@ -18,9 +18,9 @@ test("flujo completo de facturación desde el navegador", async ({ page }) => {
   await page.getByLabel("Correo electrónico").fill("admin@ejemplo.invalid");
   await page.getByLabel("Contraseña").fill(password);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  await expect(page).toHaveURL(/sales/);
+  await expect(page).toHaveURL(/dashboard/);
   await expect(
-    page.getByRole("heading", { name: "Nueva venta", exact: true }),
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await page.goto("/customers/new");
   await page.getByLabel("Nombre del cliente").fill(customerName);

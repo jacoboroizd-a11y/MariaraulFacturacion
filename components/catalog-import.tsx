@@ -3,11 +3,19 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
+import { FilePicker } from "./ui/file-picker";
 import { Button } from "./ui/button";
 import { formatMoney } from "@/lib/money";
-import type { CatalogRow } from "@/server/catalog-import";
+import type { CatalogRow, ImportMode } from "@/server/catalog-import";
 import type { Row } from "@/types/view";
-export function CatalogImport({ products }: { products: Row[] }) {
+export function CatalogImport({
+  products,
+  initialMode = "MIXED",
+}: {
+  products: Row[];
+  initialMode?: ImportMode;
+}) {
+  const [mode, setMode] = useState<ImportMode>(initialMode);
   const router = useRouter();
   const [rows, setRows] = useState<CatalogRow[]>([]),
     [errors, setErrors] = useState<string[]>([]),
@@ -16,13 +24,46 @@ export function CatalogImport({ products }: { products: Row[] }) {
   const key = useRef<string | null>(null),
     lock = useRef(false);
   return (
-    <details className="panel p-5 mb-6">
-      <summary className="cursor-pointer font-medium text-sm flex items-center gap-2">
+    <section className="panel p-5 mb-6">
+      <h2 className="font-medium flex items-center gap-2">
         <Upload size={17} />
-        Importar tratamientos y cosméticos desde Excel / CSV
-      </summary>
+        Importar desde Excel / CSV
+      </h2>
+      <div
+        className="flex flex-wrap gap-2 mt-4"
+        role="group"
+        aria-label="Tipo de importación"
+      >
+        {(
+          [
+            ["SERVICE", "Importar tratamientos"],
+            ["PRODUCT", "Importar productos e inventario"],
+            ["MIXED", "Catálogo completo"],
+          ] as const
+        ).map(([value, label]) => (
+          <Button
+            key={value}
+            variant={mode === value ? "default" : "outline"}
+            aria-pressed={mode === value}
+            disabled={busy || pending}
+            onClick={() => {
+              setMode(value);
+              setRows([]);
+              setErrors([]);
+              key.current = null;
+            }}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
       <div className="mt-5 space-y-4">
         <p className="text-sm text-slate-500">
+          {mode === "SERVICE"
+            ? "Carga tus tratamientos, tarifas por unidad y paquetes de sesiones."
+            : mode === "PRODUCT"
+              ? "Carga tus productos, precios y cantidades disponibles."
+              : "Carga tratamientos y productos en un mismo archivo usando la columna tipo."}{" "}
           Primera hoja, hasta 200 artículos. Columnas obligatorias:{" "}
           <strong>nombre</strong> y <strong>precio</strong>. El precio es fijo o
           por unidad según la columna <strong>cobro</strong>.
@@ -35,16 +76,45 @@ export function CatalogImport({ products }: { products: Row[] }) {
           reemplazan el conteo actual. Los precios usan los impuestos que ya
           tenga configurados el artículo.
         </p>
-        <a
-          href="/plantilla-catalogo.csv"
-          download
-          className="text-sm text-emerald-700 underline"
-        >
-          Descargar plantilla CSV
-        </a>
-        <label className="block">
-          Archivo .xlsx o .csv
-          <input
+        <div className="flex flex-wrap gap-4 text-sm">
+          <a
+            href={
+              mode === "SERVICE"
+                ? "/plantilla-tratamientos.xlsx"
+                : mode === "PRODUCT"
+                  ? "/plantilla-inventario.xlsx"
+                  : "/plantilla-catalogo.xlsx"
+            }
+            download
+            className="inline-flex items-center gap-2 font-medium text-emerald-800"
+          >
+            <FileSpreadsheet size={18} />
+            Descargar plantilla Excel
+          </a>
+          <a
+            href={
+              mode === "SERVICE"
+                ? "/plantilla-tratamientos.csv"
+                : mode === "PRODUCT"
+                  ? "/plantilla-inventario.csv"
+                  : "/plantilla-catalogo.csv"
+            }
+            download
+            className="text-slate-500 underline"
+          >
+            También disponible en CSV
+          </a>
+        </div>
+        <p className="text-xs text-slate-500">
+          SKU / código: usa un identificador único y estable, por ejemplo
+          COS-CRE-001 para una crema o LAS-DEP-001 para depilación láser. Cada
+          presentación tiene su propio código. No incluyas precios ni cantidades
+          en el SKU. Al reutilizar un código se actualiza el artículo.
+        </p>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Archivo .xlsx o .csv</p>
+          <FilePicker
+            key={mode}
             aria-label="Archivo del catálogo"
             type="file"
             accept=".xlsx,.csv"
@@ -60,6 +130,7 @@ export function CatalogImport({ products }: { products: Row[] }) {
               try {
                 const form = new FormData();
                 form.append("file", file);
+                form.append("mode", mode);
                 const response = await fetch("/api/catalog/preview", {
                   method: "POST",
                   body: form,
@@ -75,7 +146,7 @@ export function CatalogImport({ products }: { products: Row[] }) {
               }
             }}
           />
-        </label>
+        </div>
         {errors.length > 0 && (
           <div
             role="alert"
@@ -178,6 +249,6 @@ export function CatalogImport({ products }: { products: Row[] }) {
           <p className="text-xs text-slate-500">Leyendo archivo…</p>
         )}
       </div>
-    </details>
+    </section>
   );
 }

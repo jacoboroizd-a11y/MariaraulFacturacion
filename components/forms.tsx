@@ -1,4 +1,5 @@
 "use client";
+import { FilePicker } from "./ui/file-picker";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useState, useId } from "react";
 import { useRouter } from "next/navigation";
@@ -142,7 +143,10 @@ export function EntityForm({
         { value: "SERVICE", label: "Tratamiento / paquete" },
       ],
     },
-    { key: "category", label: "Categoría" },
+    {
+      key: "category",
+      label: "Categoría (Estético, Láser o categoría del producto)",
+    },
     {
       key: "stock",
       label: "Existencias iniciales / actuales (solo cosméticos)",
@@ -305,7 +309,12 @@ export function SettingsForm({ company }: { company: CompanyView }) {
       label: "Formato de fecha",
       options: ["dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd"].map((v) => ({
         value: v,
-        label: v,
+        label:
+          v === "dd/MM/yyyy"
+            ? "Día / mes / año (09/10/2026)"
+            : v === "MM/dd/yyyy"
+              ? "Mes / día / año (10/09/2026)"
+              : "Año / mes / día (2026-10-09)",
       })),
     },
     { key: "invoicePrefix", label: "Prefijo factura" },
@@ -342,7 +351,7 @@ export function SettingsForm({ company }: { company: CompanyView }) {
         <Fields fields={fields} register={register} />
         <div className="md:col-span-2">
           <label htmlFor="logoFile">Logo (PNG o JPG, máximo 250 KB)</label>
-          <Input
+          <FilePicker
             id="logoFile"
             type="file"
             accept="image/png,image/jpeg"

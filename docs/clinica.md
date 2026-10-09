@@ -2,7 +2,7 @@
 
 ## Venta rápida
 
-Después de iniciar sesión, ADMIN y BILLING abren **Nueva venta**. VIEWER conserva acceso de consulta al resumen y a los registros.
+Después de iniciar sesión, todos abren el **Dashboard**. ADMIN y BILLING crean documentos desde **Nueva factura**. VIEWER conserva acceso de consulta al resumen y a los registros.
 
 1. Toca tratamientos, paquetes o cosméticos para agregarlos. Ajusta la cantidad en el resumen.
 2. Escribe el nombre y teléfono opcional del cliente. Si existe, selecciona su coincidencia; si es nuevo, su ficha se crea automáticamente al guardar la factura, sin registro previo.
@@ -68,3 +68,15 @@ Después integrar la rama de clínica en `main` para que Vercel despliegue. No e
 ## Impuestos opcionales
 
 En Configuración → Impuestos puedes añadir un nombre y porcentaje, editarlo o desactivarlo. En cada tratamiento o cosmético, elige el impuesto correspondiente o Sin impuesto. Las ventas guardan el impuesto aplicado en ese momento; modificar la tarifa no altera los comprobantes anteriores.
+
+## Subir inventario y tratamientos
+
+En Tratamientos y cosméticos están visibles las opciones Importar tratamientos, Importar productos e inventario y Catálogo completo. Inventario incluye la importación de productos. Selecciona la opción, descarga su plantilla y sube un Excel (.xlsx) o CSV. Revisa la vista previa y pulsa Guardar. En archivos separados no necesitas la columna tipo. En Catálogo completo sí debes indicar tipo para los productos. Nombre y precio son obligatorios; existencias es el conteo total disponible y código identifica los artículos para actualizarlos sin duplicarlos.
+
+## Dashboard y reporte mensual
+
+El dashboard es la pantalla de inicio: ventas, cobros, saldos, clientes, tratamientos estéticos y láser facturados, sesiones realizadas, inventario, últimos tratamientos y próximas citas. Para clasificar tratamientos, usa Estético o Láser en categoría. Un tratamiento sin categoría sigue disponible, pero no cuenta en esos dos grupos.
+
+Selecciona un mes y descarga el Excel desde el dashboard. Sesiones realizadas usa la fecha y hora de cada visita marcada como realizada, en Nicaragua. Tratamientos facturados usa el mes de la fecha del comprobante y muestra la hora de registro. Comprar un paquete no implica haber realizado sus sesiones.
+
+Las plantillas Excel incluyen Datos (la hoja a llenar), Instrucciones y Ejemplos. Los ejemplos no se importan ni fijan tus precios. Usa un SKU estable por artículo y presentación: EST-BTX-001, LAS-DEP-001, COS-CRE-001. Reutiliza el mismo SKU al actualizar precios o stock. Lotes, caducidad y precios no forman parte del código.

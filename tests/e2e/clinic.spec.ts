@@ -17,7 +17,7 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     await page.getByLabel("Correo electrónico").fill("admin@ejemplo.invalid");
     await page.getByLabel("Contraseña").fill(process.env.SEED_ADMIN_PASSWORD!);
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
-    await expect(page).toHaveURL(/sales/);
+    await expect(page).toHaveURL(/dashboard/);
     const created = await page.request.post("/api/data/products", {
       headers: { origin: baseURL },
       data: {
@@ -31,12 +31,42 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     });
     expect(created.status()).toBe(200);
     productId = (await created.json()).id;
+    await page.goto("/dashboard");
+    await expect(
+      page.getByRole("heading", { name: "Últimos tratamientos facturados" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Próximas citas" }),
+    ).toBeVisible();
+    const template = await page.request.get("/plantilla-inventario.xlsx");
+    expect(template.status()).toBe(200);
+    const report = await page.request.get("/api/reports/clinic?month=2026-10");
+    expect(report.status()).toBe(200);
+    expect(report.headers()["content-disposition"]).toContain(
+      "tratamientos-2026-10.xlsx",
+    );
+    await page.screenshot({
+      path: "/workspace/.cloud/clinic-dashboard.png",
+      fullPage: true,
+    });
+    await page.goto("/appointments?month=2026-10");
+    await expect(
+      page.getByRole("heading", { name: "Citas", exact: true }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: "/workspace/.cloud/clinic-appointments-mobile.png",
+      animations: "disabled",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/products");
-    await page
-      .getByText("Importar tratamientos y cosméticos desde Excel / CSV", {
-        exact: true,
-      })
-      .click();
+    await expect(page.getByLabel("Archivo del catálogo")).toBeEnabled();
     await page.getByLabel("Archivo del catálogo").setInputFiles({
       name: "catalogo.csv",
       mimeType: "text/csv",
@@ -64,6 +94,33 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
       (p: { sku: string }) => p.sku === `BOTOX-${suffix}`,
     ).id;
     await page.goto("/inventory");
+    await expect(
+      page.getByRole("button", { name: "Importar productos e inventario" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("Archivo del catálogo")).toBeEnabled();
+    await page.getByLabel("Archivo del catálogo").setInputFiles({
+      name: "inventario.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        `nombre,precio,existencias,codigo\nCrema ${suffix},50,4,CREMA-${suffix}`,
+      ),
+    });
+    await expect(
+      page.getByRole("button", { name: "Guardar 1 artículos" }),
+    ).toBeVisible();
+    const inventoryImport = page.waitForRequest(
+      (r) =>
+        r.method() === "POST" && r.url().endsWith("/api/data/catalog-import"),
+    );
+    await page.getByRole("button", { name: "Guardar 1 artículos" }).click();
+    const inventoryKey = (await inventoryImport).postDataJSON().requestId;
+    await expect(page.getByText("1 artículos importados")).toBeVisible();
+    await db.auditLog.deleteMany({
+      where: {
+        action: "CATALOG_IMPORTED",
+        metadata: { path: ["requestId"], equals: inventoryKey },
+      },
+    });
     const stockCard = page
       .getByRole("article")
       .filter({ hasText: `Crema ${suffix}` });
@@ -97,7 +154,7 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
       .click();
     const payload = (await submission).postDataJSON();
     await expect(
-      page.getByRole("heading", { name: "Venta guardada" }),
+      page.getByRole("heading", { name: "Factura guardada" }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Imprimir", exact: true }),
@@ -179,7 +236,7 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
       .getByRole("button", { name: "Guardar y ver comprobante" })
       .click();
     await expect(
-      page.getByRole("heading", { name: "Venta guardada" }),
+      page.getByRole("heading", { name: "Factura guardada" }),
     ).toBeVisible();
     expect(
       (await db.product.findUniqueOrThrow({ where: { id: cosmeticId } })).stock,

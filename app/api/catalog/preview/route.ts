@@ -10,7 +10,10 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) throw new AppError("Selecciona un archivo.");
-    return NextResponse.json(await parseCatalogFile(file));
+    const mode = form.get("mode") || "MIXED";
+    if (mode !== "MIXED" && mode !== "SERVICE" && mode !== "PRODUCT")
+      throw new AppError("Selecciona un tipo de importación válido.");
+    return NextResponse.json(await parseCatalogFile(file, mode));
   } catch (error) {
     return NextResponse.json(
       {

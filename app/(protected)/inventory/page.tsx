@@ -1,3 +1,4 @@
+import { CatalogImport } from "@/components/catalog-import";
 import { pageContext } from "@/server/auth";
 import { db } from "@/server/db";
 import { serialize } from "@/server/queries";
@@ -41,10 +42,15 @@ export default async function InventoryPage() {
     };
   });
   return (
-    <Inventory
-      products={serialize(products)}
-      movements={movements}
-      writable={ctx.role !== "VIEWER"}
-    />
+    <>
+      {ctx.role !== "VIEWER" && (
+        <CatalogImport products={serialize(products)} initialMode="PRODUCT" />
+      )}
+      <Inventory
+        products={serialize(products)}
+        movements={movements}
+        writable={ctx.role !== "VIEWER"}
+      />
+    </>
   );
 }

@@ -25,15 +25,16 @@ import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import type { Context } from "@/server/auth";
 const nav = [
-  { href: "/sales", label: "Nueva venta", icon: Sparkles },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/sales", label: "Nueva factura", icon: Sparkles },
   { href: "/invoices", label: "Ventas y abonos", icon: ReceiptText },
-  { href: "/sessions", label: "Sesiones y citas", icon: CalendarDays },
+  { href: "/appointments", label: "Citas", icon: CalendarDays },
+  { href: "/sessions", label: "Sesiones y seguimiento", icon: CalendarDays },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/inventory", label: "Inventario", icon: Package },
   { href: "/products", label: "Tratamientos y cosméticos", icon: Package },
 ];
 const moreNav = [
-  { href: "/dashboard", label: "Resumen", icon: LayoutDashboard },
   { href: "/quotes", label: "Cotizaciones", icon: FileText },
   { href: "/payments", label: "Pagos", icon: CreditCard },
   { href: "/receipts", label: "Recibos", icon: ReceiptText },
@@ -228,7 +229,7 @@ export function Shell({
               <Button size="sm" asChild>
                 <Link href="/sales">
                   <Plus size={14} />
-                  <span className="hidden sm:inline">Nueva venta</span>
+                  <span className="hidden sm:inline">Nueva factura</span>
                 </Link>
               </Button>
             )}

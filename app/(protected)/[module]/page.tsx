@@ -32,7 +32,7 @@ const names: Record<
   invoices: {
     title: "Facturas",
     description: "Controla tus ventas y el saldo de cada factura.",
-    new: "Nueva venta",
+    new: "Nueva factura",
   },
   payments: {
     title: "Pagos",

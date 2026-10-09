@@ -16,9 +16,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SalesChart } from "@/components/chart";
 import type { Analytics } from "@/types/view";
+import { clinicOverview } from "@/server/clinic-overview";
+import { appointmentLabel } from "@/lib/utils";
 export default async function Dashboard() {
   const ctx = await pageContext();
-  const a: Analytics = await analytics(ctx);
+  const [a, clinic]: [Analytics, Awaited<ReturnType<typeof clinicOverview>>] =
+    await Promise.all([analytics(ctx), clinicOverview(ctx)]);
   const stats = [
     {
       title: "Ventas del mes",
@@ -35,7 +38,7 @@ export default async function Dashboard() {
     {
       title: "Cuentas por cobrar",
       value: formatMoney(a.receivable, a.currency),
-      sub: `${a.overdueCount} facturas vencidas`,
+      sub: "Saldos pendientes de pago",
       icon: Clock,
     },
     {
@@ -54,7 +57,7 @@ export default async function Dashboard() {
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-2">
-            Hola, {ctx.name.split(" ")[0]}. Así va tu empresa hoy.
+            Hola, {ctx.name.split(" ")[0]}. Así va tu clínica hoy.
           </p>
         </div>
         <div className="flex gap-3 items-center">
@@ -63,7 +66,7 @@ export default async function Dashboard() {
           </span>
           {ctx.role !== "VIEWER" && (
             <Button asChild>
-              <Link href="/invoices/new">
+              <Link href="/sales">
                 <Plus size={15} />
                 Nueva factura
               </Link>
@@ -71,6 +74,30 @@ export default async function Dashboard() {
           )}
         </div>
       </div>
+      <section className="panel p-5 mb-6 flex flex-wrap items-center justify-between gap-5">
+        <div>
+          <h2 className="font-semibold">Reporte mensual de tratamientos</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Pacientes, fechas, horas, tratamientos estéticos y láser.
+          </p>
+        </div>
+        <form
+          action="/api/reports/clinic"
+          className="flex flex-wrap items-center gap-3"
+        >
+          <input
+            type="month"
+            name="month"
+            aria-label="Mes del reporte"
+            defaultValue={todayString().slice(0, 7)}
+            required
+            className="rounded-xl border border-slate-200 px-3 h-11"
+          />
+          <Button type="submit" variant="outline">
+            Descargar Excel
+          </Button>
+        </form>
+      </section>
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {stats.map((s) => (
           <div className="panel p-5" key={s.title}>
@@ -84,6 +111,101 @@ export default async function Dashboard() {
             <p className="text-[11px] text-slate-400 mt-3">{s.sub}</p>
           </div>
         ))}
+      </div>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+        {[
+          {
+            label: "Estéticos facturados",
+            value: clinic.aesthetic,
+            note: "Tratamientos del mes",
+          },
+          {
+            label: "Láser facturados",
+            value: clinic.laser,
+            note: "Tratamientos del mes",
+          },
+          {
+            label: "Sesiones realizadas",
+            value: clinic.performed,
+            note: "Visitas registradas este mes",
+          },
+          {
+            label: "Unidades en inventario",
+            value: clinic.stock,
+            note: `${clinic.outOfStock} productos sin existencias`,
+          },
+        ].map((s) => (
+          <div key={s.label} className="panel p-5">
+            <p className="text-xs text-slate-500">{s.label}</p>
+            <p className="text-2xl font-semibold mt-3">{s.value}</p>
+            <p className="text-xs text-slate-400 mt-2">{s.note}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid xl:grid-cols-[2fr_1fr] gap-5 mt-6">
+        <section className="panel p-5">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-semibold">Últimos tratamientos facturados</h2>
+            <Link href="/sessions" className="text-xs text-emerald-700">
+              Ver seguimiento
+            </Link>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">
+            {clinic.contracted} sesiones contratadas este mes. Marca cada visita
+            como realizada en Sesiones y citas.
+          </p>
+          <div className="space-y-3">
+            {clinic.recent.length ? (
+              clinic.recent.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/invoices/${item.invoiceId}`}
+                  className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-white/60 border border-slate-100 hover:bg-emerald-50/60 transition-colors"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{item.description}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {item.invoice.customer.name} ·{" "}
+                      {item.product?.category || "Sin categoría"}
+                    </p>
+                  </div>
+                  <div className="text-xs text-slate-500 sm:text-right">
+                    <p>{dateLabel(item.invoice.date.toISOString())}</p>
+                    <p className="mt-1">
+                      {item.sessionsUsed} / {item.sessionsTotal} sesiones
+                      realizadas
+                    </p>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <p className="text-sm text-slate-500 py-5">
+                Los tratamientos aparecerán al guardar tu primera factura.
+              </p>
+            )}
+          </div>
+        </section>
+        <section className="panel p-5">
+          <h2 className="font-semibold mb-4">Próximas citas</h2>
+          {clinic.appointments.length ? (
+            clinic.appointments.map((invoice) => (
+              <Link
+                key={invoice.id}
+                href={`/invoices/${invoice.id}`}
+                className="block py-4 border-b border-slate-100 last:border-0"
+              >
+                <p className="text-sm font-medium">{invoice.customer.name}</p>
+                <p className="text-xs text-emerald-700 mt-2">
+                  {appointmentLabel(invoice.nextAppointment!.toISOString())}
+                </p>
+              </Link>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">
+              Aún no hay próximas citas agendadas.
+            </p>
+          )}
+        </section>
       </div>
       <div className="grid xl:grid-cols-[2fr_1fr] gap-5 mt-6">
         <div className="panel p-6">
