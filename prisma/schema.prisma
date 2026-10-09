@@ -51,7 +51,8 @@ enum PaymentMethod {
 
 model User {
   id           String       @id @default(cuid())
-  email        String       @unique
+  email        String?      @unique
+  username     String?      @unique
   name         String
   passwordHash String
   active       Boolean      @default(true)

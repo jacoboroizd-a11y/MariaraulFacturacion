@@ -15,8 +15,8 @@ test("flujo completo de facturación desde el navegador", async ({ page }) => {
   if (!password)
     throw new Error("SEED_ADMIN_PASSWORD requerido para las pruebas E2E.");
   await page.goto("/login");
-  await page.getByLabel("Correo electrónico").fill("admin@ejemplo.invalid");
-  await page.getByLabel("Contraseña").fill(password);
+  await page.getByLabel("Usuario o correo").fill("admin@ejemplo.invalid");
+  await page.getByLabel("PIN o contraseña").fill(password);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await expect(page).toHaveURL(/dashboard/);
   await expect(
@@ -119,7 +119,7 @@ test("flujo completo de facturación desde el navegador", async ({ page }) => {
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "Abrir menú" }).click();
   await expect(
-    page.getByRole("link", { name: "Tratamientos y cosméticos" }),
+    page.getByRole("link", { name: "Catálogo e inventario" }),
   ).toBeVisible();
 });
 test("protección de rutas, origen y credenciales", async ({ page }) => {
@@ -132,10 +132,10 @@ test("protección de rutas, origen y credenciales", async ({ page }) => {
     data: { email: "admin@ejemplo.invalid", password: "incorrect" },
   });
   expect(badOrigin.status()).toBe(403);
-  await page.getByLabel("Correo electrónico").fill("admin@ejemplo.invalid");
-  await page.getByLabel("Contraseña").fill("incorrect");
+  await page.getByLabel("Usuario o correo").fill("admin@ejemplo.invalid");
+  await page.getByLabel("PIN o contraseña").fill("incorrect");
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await expect(
-    page.getByText("Correo o contraseña incorrectos.", { exact: true }),
+    page.getByText("Usuario o PIN incorrectos.", { exact: true }),
   ).toBeVisible();
 });

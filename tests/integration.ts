@@ -1,3 +1,4 @@
+import { submitCashClose, reviewCashClose } from "../server/cash-close";
 import "dotenv/config";
 import ExcelJS from "exceljs";
 import { clinicReport } from "../server/clinic-report";
@@ -10,6 +11,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "../server/db";
 import {
+  createUser,
   saveCustomer,
   saveProduct,
   saveTax,
@@ -74,6 +76,29 @@ async function main() {
   const other = { ...ctx, companyId: ids[1] };
   const viewer = { ...ctx, role: "VIEWER" as const };
   const billing = { ...ctx, role: "BILLING" as const };
+  const staff = await createUser(ctx, {
+    name: "Recepción",
+    username: "recepcion-" + randomUUID().slice(0, 8),
+    password: "824196",
+    role: "BILLING",
+  });
+  assert.ok(staff.username);
+  assert.equal(staff.email, null);
+  const staffRecord = await db.user.findUniqueOrThrow({
+    where: { id: staff.id },
+  });
+  assert.notEqual(staffRecord.passwordHash, "824196");
+  await assert.rejects(
+    () => analytics(billing),
+    (e) => e instanceof Error && "status" in e && e.status === 403,
+  );
+  await assert.rejects(
+    () => clinicReport(viewer, "2026-10"),
+    (e) => e instanceof Error && "status" in e && e.status === 403,
+  );
+  await db.membership.deleteMany({ where: { userId: staff.id } });
+  await db.auditLog.deleteMany({ where: { entityId: staff.id } });
+  await db.user.delete({ where: { id: staff.id } });
   const customer = await saveCustomer(ctx, { name: "Cliente de prueba" });
   const foreign = await saveCustomer(other, {
     name: "Cliente de otra empresa",
@@ -791,6 +816,82 @@ async function main() {
   await rejected(
     () => importCatalog(viewer, importRequest),
     "Consulta no importa catálogo",
+  );
+  const cashPayments = await db.payment.findMany({
+    where: {
+      companyId: ctx.companyId,
+      deletedAt: null,
+      method: "CASH",
+      currency: "NIO",
+      paymentDate: new Date(todayString() + "T00:00:00Z"),
+      invoice: { status: { notIn: ["VOID", "DRAFT"] } },
+    },
+  });
+  const cashReceived = cashPayments.reduce(
+    (sum, p) => sum + Number(p.amount),
+    0,
+  );
+  const closeInput = {
+    requestId: randomUUID(),
+    day: todayString(),
+    NIO: { opening: "50", out: "20", counted: (cashReceived + 30).toFixed(2) },
+    USD: { opening: "0", out: "0", counted: "0" },
+    notes: "Caja verificada",
+  };
+  const [closeA, closeB] = await Promise.all([
+    submitCashClose(billing, closeInput),
+    submitCashClose(billing, closeInput),
+  ]);
+  check(closeA.id === closeB.id, "Cierre concurrente es idempotente");
+  const cashMeta = closeA.metadata as {
+    NIO: { difference: string; received: string; expected: string };
+  };
+  check(
+    cashMeta.NIO.difference === "0.00" &&
+      Number(cashMeta.NIO.expected) === cashReceived + 30,
+    "Cierre concilia fondo, efectivo del día y salidas",
+  );
+  await rejected(
+    () =>
+      submitCashClose(billing, {
+        ...closeInput,
+        NIO: { ...closeInput.NIO, counted: "0" },
+      }),
+    "Reintento de cierre no cambia el efectivo contado",
+  );
+  await rejected(
+    () => submitCashClose(billing, { ...closeInput, requestId: randomUUID() }),
+    "No duplica el cierre del día",
+  );
+  await rejected(
+    () => reviewCashClose(billing, { reviewId: closeA.id, status: "APPROVED" }),
+    "Facturación no revisa cierres",
+  );
+  await rejected(
+    () => reviewCashClose(other, { reviewId: closeA.id, status: "APPROVED" }),
+    "Revisión aislada por empresa",
+  );
+  await reviewCashClose(ctx, {
+    reviewId: closeA.id,
+    status: "REJECTED",
+    notes: "Recontar",
+  });
+  const corrected = await submitCashClose(billing, {
+    ...closeInput,
+    requestId: randomUUID(),
+    notes: "Recontado",
+  });
+  check(
+    corrected.id !== closeA.id,
+    "Corrección permitida después de revisión administrativa",
+  );
+  const approval = await reviewCashClose(ctx, {
+    reviewId: corrected.id,
+    status: "APPROVED",
+  });
+  check(
+    (approval.metadata as { status: string }).status === "APPROVED",
+    "Administrador aprueba cierre",
   );
   console.log(`\n${checks} comprobaciones de integración pasaron.`);
 }

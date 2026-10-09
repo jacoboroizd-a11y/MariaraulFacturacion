@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { type Context, AppError } from "./auth";
+import { type Context, AppError, authorize } from "./auth";
 import { invoiceStatus, decimal, convertCurrency, amount } from "@/lib/money";
 import { todayString } from "@/lib/utils";
 export const serialize = <T>(value: T) => JSON.parse(JSON.stringify(value));
@@ -69,7 +69,15 @@ export async function list(ctx: Context, kind: string) {
       return db.membership.findMany({
         where,
         include: {
-          user: { select: { id: true, name: true, email: true, active: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              username: true,
+              active: true,
+            },
+          },
         },
       });
     case "audit":
@@ -212,6 +220,7 @@ export async function search(ctx: Context, q: string) {
   ];
 }
 export async function analytics(ctx: Context, start?: string, end?: string) {
+  authorize(ctx, true);
   await refreshStatuses(ctx.companyId);
   const today = todayString();
   const now = new Date(today + "T00:00:00Z");

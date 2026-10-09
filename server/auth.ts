@@ -73,7 +73,8 @@ export function authorize(ctx: Context, admin = false) {
     throw new AppError("No tienes permiso para realizar esta operación.", 403);
 }
 export async function login(email: string, password: string) {
-  const key = hash(email.toLowerCase());
+  const identifier = email.trim().toLowerCase();
+  const key = hash(identifier);
   const now = new Date();
   const attempt = await db.loginAttempt.upsert({
     where: { key },
@@ -88,7 +89,9 @@ export async function login(email: string, password: string) {
   else if (attempt.count > 10)
     throw new AppError("Demasiados intentos. Espera 15 minutos.", 429);
   const user = await db.user.findUnique({
-    where: { email: email.toLowerCase() },
+    where: identifier.includes("@")
+      ? { email: identifier }
+      : { username: identifier },
     include: { memberships: { orderBy: { id: "asc" } } },
   });
   // Use a valid cost-12 dummy hash to avoid skipping password work for unknown accounts.
@@ -98,7 +101,7 @@ export async function login(email: string, password: string) {
       "$2b$12$C6UzMDM.H6dfI/f/IKcEe.5zQF6C7vQeQcSWlxIxVSIIJMHRQFSFi",
   );
   if (!user || !valid || !user.active || !user.memberships.length)
-    throw new AppError("Correo o contraseña incorrectos.", 401);
+    throw new AppError("Usuario o PIN incorrectos.", 401);
   await db.loginAttempt.deleteMany({ where: { key } });
   const expiresAt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   const session = await db.session.create({

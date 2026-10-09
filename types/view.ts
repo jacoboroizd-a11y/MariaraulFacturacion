@@ -67,7 +67,13 @@ export type Row = {
   voidedAt?: string | null;
   createdAt?: string;
   role?: string;
-  user?: { id: string; name: string; email: string; active: boolean };
+  user?: {
+    id: string;
+    name: string;
+    email: string | null;
+    username?: string | null;
+    active: boolean;
+  };
   action?: string;
   timestamp?: string;
   entityType?: string;

@@ -136,16 +136,43 @@ export const settingsSchema = z
     (v) => v.primaryCurrency !== v.secondaryCurrency,
     "Las monedas deben ser diferentes.",
   );
-export const userSchema = z.object({
-  name,
-  email: z.email().transform((v) => v.toLowerCase()),
-  password: z
-    .string()
-    .min(12)
-    .max(128)
-    .refine(
-      (value) => Buffer.byteLength(value, "utf8") <= 72,
-      "La contraseña admite máximo 72 bytes.",
-    ),
-  role: z.enum(["ADMIN", "BILLING", "VIEWER"]),
-});
+export const userSchema = z
+  .object({
+    name,
+    email: z
+      .email()
+      .transform((v) => v.toLowerCase())
+      .optional(),
+    username: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(
+        /^[a-z][a-z0-9._-]{2,29}$/,
+        "Usa 3 a 30 letras, números, puntos o guiones.",
+      )
+      .optional(),
+    password: z.string().min(1).max(72),
+    role: z.enum(["ADMIN", "BILLING", "VIEWER"]),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.email && !data.username)
+      ctx.addIssue({
+        code: "custom",
+        path: ["username"],
+        message: "Indica un usuario.",
+      });
+    if (
+      data.username
+        ? !/^\d{6,12}$/.test(data.password)
+        : data.password.length < 12 ||
+          Buffer.byteLength(data.password, "utf8") > 72
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["password"],
+        message: data.username
+          ? "El PIN debe tener de 6 a 12 dígitos."
+          : "La contraseña debe tener al menos 12 caracteres y máximo 72 bytes.",
+      });
+  });

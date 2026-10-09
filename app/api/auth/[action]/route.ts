@@ -17,7 +17,10 @@ export async function POST(
     }
     if (action !== "login") throw new AppError("No encontrado.", 404);
     const data = z
-      .object({ email: z.email(), password: z.string().min(1).max(128) })
+      .object({
+        email: z.string().trim().min(3).max(254),
+        password: z.string().min(1).max(128),
+      })
       .parse(
         isJson
           ? await request.json()

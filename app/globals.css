@@ -230,3 +230,25 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Touch screens: readable fields, usable targets and room for the home indicator. */
+@media screen and (max-width: 1023px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  button,
+  a[role="button"] {
+    min-height: 44px;
+  }
+  main {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+}
+@media (pointer: coarse) {
+  button,
+  a[role="button"] {
+    min-height: 44px;
+  }
+}

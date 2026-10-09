@@ -316,7 +316,16 @@ export function ClinicSale({ options }: { options: Options }) {
                 ))}
               </div>
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
+            {cart.length > 0 && (
+              <a
+                href="#invoice-checkout"
+                className="xl:hidden flex justify-between items-center rounded-xl bg-emerald-700 text-white px-4 py-3 mb-4 text-sm font-medium"
+              >
+                <span>Ver factura · {cart.length} artículos</span>
+                <span>{formatMoney(totals.total, currency)}</span>
+              </a>
+            )}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
               {shown.map((p) => {
                 const isPackage = p.type === "SERVICE" && (p.sessions || 1) > 1;
                 const Icon = isPackage
@@ -331,10 +340,10 @@ export function ClinicSale({ options }: { options: Options }) {
                     onClick={() => add(p)}
                     disabled={p.type === "PRODUCT" && !p.stock}
                     aria-label={`Agregar ${p.name}`}
-                    className="panel p-5 text-left hover:border-emerald-500 hover:shadow-md transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="panel p-3 sm:p-5 min-w-0 text-left hover:border-emerald-500 hover:shadow-md transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <div
-                      className={`rounded-2xl h-20 flex items-center justify-center mb-4 ${isPackage ? "bg-violet-50 text-violet-600" : p.type === "SERVICE" ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-600"}`}
+                      className={`rounded-2xl h-12 sm:h-20 flex items-center justify-center mb-4 ${isPackage ? "bg-violet-50 text-violet-600" : p.type === "SERVICE" ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-600"}`}
                     >
                       <Icon size={36} strokeWidth={1.5} />
                     </div>
@@ -466,7 +475,10 @@ export function ClinicSale({ options }: { options: Options }) {
               )}
             </div>
           </section>
-          <section className="panel p-5 xl:sticky xl:top-5 space-y-5">
+          <section
+            id="invoice-checkout"
+            className="panel p-5 xl:sticky xl:top-5 space-y-5 scroll-mt-5"
+          >
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">Tu venta</h2>
               <select

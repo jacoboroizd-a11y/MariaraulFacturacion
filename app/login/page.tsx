@@ -1,10 +1,20 @@
+import Image from "next/image";
 import { LoginForm } from "@/components/login-form";
 export default function Login() {
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       <section className="hidden lg:flex bg-[#103c32] text-white p-16 flex-col justify-between">
         <div className="text-xl font-semibold tracking-tight">
-          mariaraul<span className="text-emerald-300">.</span>
+          <div className="bg-white/95 rounded-2xl px-5 py-4 w-fit">
+            <Image
+              src="/brand/mariaraul.png"
+              alt="Dra. Mariaraúl · Medicina estética"
+              width={2833}
+              height={682}
+              className="w-80 h-auto"
+              priority
+            />
+          </div>
         </div>
         <div>
           <span className="text-emerald-300 text-sm">
@@ -30,7 +40,14 @@ export default function Login() {
       <section className="flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <div className="lg:hidden text-2xl font-bold mb-12 text-emerald-800">
-            mariaraul.
+            <Image
+              src="/brand/mariaraul.png"
+              alt="Dra. Mariaraúl · Medicina estética"
+              width={2833}
+              height={682}
+              className="w-72 h-auto"
+              priority
+            />
           </div>
           <h2 className="text-3xl font-semibold tracking-tight">
             Bienvenido de nuevo

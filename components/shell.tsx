@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -29,6 +30,7 @@ const nav = [
   { href: "/sales", label: "Nueva factura", icon: Sparkles },
   { href: "/invoices", label: "Ventas y abonos", icon: ReceiptText },
   { href: "/appointments", label: "Citas", icon: CalendarDays },
+  { href: "/daily-close", label: "Cierre de caja", icon: CreditCard },
   { href: "/sessions", label: "Sesiones y seguimiento", icon: CalendarDays },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/products", label: "Catálogo e inventario", icon: Package },
@@ -82,11 +84,18 @@ export function Shell({
         )}
       >
         <div className="h-20 flex items-center px-7 text-2xl font-bold tracking-tight text-[#163d33]">
-          mariaraul<span className="text-emerald-600">.</span>
+          <Image
+            src="/brand/mariaraul.png"
+            alt="Dra. Mariaraúl · Medicina estética"
+            width={2833}
+            height={682}
+            className="w-[184px] h-auto"
+            priority
+          />
           <button
             onClick={() => setOpen(false)}
             aria-label="Cerrar menú"
-            className="ml-auto lg:hidden"
+            className="ml-auto lg:hidden min-w-11 min-h-11 flex items-center justify-center"
           >
             <X size={18} />
           </button>
@@ -103,9 +112,14 @@ export function Shell({
           </div>
           <ChevronDown size={13} className="ml-auto text-slate-400" />
         </div>
-        <nav className="px-3 space-y-1 overflow-y-auto">
+        <nav className="px-3 space-y-1 overflow-y-auto min-h-0">
           {nav
-            .filter((n) => n.href !== "/sales" || ctx.role !== "VIEWER")
+            .filter(
+              (n) =>
+                (!["/sales", "/daily-close"].includes(n.href) ||
+                  ctx.role !== "VIEWER") &&
+                (n.href !== "/dashboard" || ctx.role === "ADMIN"),
+            )
             .map((n) => (
               <div key={n.href}>
                 {(n.href != "/settings" || ctx.role === "ADMIN") && (
@@ -133,7 +147,11 @@ export function Shell({
               Más opciones
             </summary>
             {moreNav
-              .filter((n) => n.href !== "/settings" || ctx.role === "ADMIN")
+              .filter(
+                (n) =>
+                  !["/settings", "/reports"].includes(n.href) ||
+                  ctx.role === "ADMIN",
+              )
               .map((n) => (
                 <Link
                   key={n.href}
@@ -152,7 +170,7 @@ export function Shell({
               ))}
           </details>
         </nav>
-        <div className="mt-auto p-4">
+        <div className="mt-auto p-4 shrink-0">
           <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 flex gap-2 items-center">
             <ShieldCheck size={16} className="text-emerald-600" />
             Sesión segura · {ctx.role}
@@ -182,11 +200,11 @@ export function Shell({
         />
       )}
       <div className="lg:ml-60">
-        <header className="h-18 glass-nav border-b border-slate-200 flex items-center justify-between gap-4 px-6 lg:px-9">
+        <header className="h-18 glass-nav border-b border-slate-200 flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-9">
           <button
             onClick={() => setOpen(true)}
             aria-label="Abrir menú"
-            className="lg:hidden"
+            className="lg:hidden min-w-11 min-h-11 flex items-center justify-center"
           >
             <Menu size={20} />
           </button>
@@ -244,7 +262,9 @@ export function Shell({
             </div>
           </div>
         </header>
-        <main className="p-5 lg:p-9 max-w-[1600px] mx-auto">{children}</main>
+        <main className="p-4 sm:p-5 lg:p-9 max-w-[1600px] mx-auto">
+          {children}
+        </main>
       </div>
     </div>
   );

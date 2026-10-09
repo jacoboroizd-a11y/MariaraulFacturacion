@@ -88,3 +88,19 @@ Aplica docs/conectar-google-calendar-neon.sql antes de desplegar la conexión. E
 ## Comprobantes impresos
 
 Facturas, recibos y cotizaciones se exportan como PDF Carta vertical (8.5 × 11 pulgadas), con logo, detalle, importes, forma de pago y próxima cita. En impresión del navegador se propone el mismo tamaño mediante CSS; verifica el papel y desactiva los encabezados/pies del navegador. El PDF mantiene el tamaño y la composición independientemente del navegador. Los comprobantes habituales caben en una hoja; los documentos largos continúan en otra página sin cortar sus filas.
+
+## Marca, acceso del personal y cierre diario
+
+Los logos oficiales están en `public/brand/mariaraul.png` y `app/icon.svg`. El logo completo aparece en navegación, acceso y comprobantes Carta; se conserva el logo guardado en las facturas anteriores si existe.
+
+Administración → Usuarios permite crear nombre, usuario corto, PIN de 6 a 12 dígitos y rol. No requiere correo. Los PIN se almacenan con bcrypt y el acceso conserva el bloqueo por intentos. Las cuentas antiguas siguen entrando con correo y contraseña. Los reportes generales, dashboard financiero y exportación mensual son exclusivos de ADMIN. Facturación puede entregar el cierre de caja. Administración revisa y aprueba o solicita una corrección; cada revisión conserva su autor. Facturación entra directamente a Nueva factura.
+
+Reportes → Cierre diario separa efectivo, tarjeta, transferencia, cheque y otros por NIO y USD. Incluye abonos según fecha de pago y excluye pagos anulados. El arqueo recoge fondo inicial, salidas y efectivo contado. Calcula el esperado y guarda faltantes o sobrantes por moneda, con los cobros en el estado de entrega. Solo permite otro cierre del mismo día si Administración solicita una corrección.
+
+Para activar en producción el calendario y el acceso del personal, ejecutar `docs/activar-calendario-y-usuarios-neon.sql` en Neon antes de desplegar esta rama. Es idempotente, registra las migraciones con sus checksums y conserva las cuentas existentes.
+
+## iPad
+
+Abrir el sitio en Safari → Compartir → Añadir a pantalla de inicio. Usa el icono oficial y se abre sin la barra del navegador. Requiere conexión a internet; no almacena facturas ni pagos offline. La sesión dura ocho horas; cada empleado usa su propio usuario y PIN. Se comprueba el diseño a tamaño de tablet en navegador; no se ha probado en un iPad físico.
+
+En móviles, el catálogo de Nueva factura usa dos columnas compactas y ofrece un acceso directo al cobro al agregar artículos. Los campos usan letra de al menos 16 px y los botones tienen objetivos táctiles de 44 px. Se verifican anchos de 320, 375, 390 y 820 px sin desbordamiento horizontal.

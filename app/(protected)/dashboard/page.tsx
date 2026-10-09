@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -20,6 +21,7 @@ import { clinicOverview } from "@/server/clinic-overview";
 import { appointmentLabel } from "@/lib/utils";
 export default async function Dashboard() {
   const ctx = await pageContext();
+  if (ctx.role !== "ADMIN") redirect("/sales");
   const [a, clinic]: [Analytics, Awaited<ReturnType<typeof clinicOverview>>] =
     await Promise.all([analytics(ctx), clinicOverview(ctx)]);
   const stats = [
@@ -64,40 +66,42 @@ export default async function Dashboard() {
           <span className="text-xs text-slate-500 border border-slate-200 bg-white rounded-lg px-3 py-2.5">
             {dateLabel(todayString())}
           </span>
-          {ctx.role !== "VIEWER" && (
+          {
             <Button asChild>
               <Link href="/sales">
                 <Plus size={15} />
                 Nueva factura
               </Link>
             </Button>
-          )}
+          }
         </div>
       </div>
-      <section className="panel p-5 mb-6 flex flex-wrap items-center justify-between gap-5">
-        <div>
-          <h2 className="font-semibold">Reporte mensual de tratamientos</h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Pacientes, fechas, horas, tratamientos estéticos y láser.
-          </p>
-        </div>
-        <form
-          action="/api/reports/clinic"
-          className="flex flex-wrap items-center gap-3"
-        >
-          <input
-            type="month"
-            name="month"
-            aria-label="Mes del reporte"
-            defaultValue={todayString().slice(0, 7)}
-            required
-            className="rounded-xl border border-slate-200 px-3 h-11"
-          />
-          <Button type="submit" variant="outline">
-            Descargar Excel
-          </Button>
-        </form>
-      </section>
+      {ctx.role === "ADMIN" && (
+        <section className="panel p-5 mb-6 flex flex-wrap items-center justify-between gap-5">
+          <div>
+            <h2 className="font-semibold">Reporte mensual de tratamientos</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Pacientes, fechas, horas, tratamientos estéticos y láser.
+            </p>
+          </div>
+          <form
+            action="/api/reports/clinic"
+            className="flex flex-wrap items-center gap-3"
+          >
+            <input
+              type="month"
+              name="month"
+              aria-label="Mes del reporte"
+              defaultValue={todayString().slice(0, 7)}
+              required
+              className="rounded-xl border border-slate-200 px-3 h-11"
+            />
+            <Button type="submit" variant="outline">
+              Descargar Excel
+            </Button>
+          </form>
+        </section>
+      )}
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {stats.map((s) => (
           <div className="panel p-5" key={s.title}>

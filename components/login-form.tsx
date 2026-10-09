@@ -40,18 +40,18 @@ export function LoginForm() {
       })}
     >
       <div>
-        <label htmlFor="email">Correo electrónico</label>
+        <label htmlFor="email">Usuario o correo</label>
         <Input
           id="email"
-          type="email"
+          type="text"
           autoComplete="username"
-          placeholder="tu@empresa.com"
+          placeholder="Tu usuario"
           required
           {...register("email")}
         />
       </div>
       <div>
-        <label htmlFor="password">Contraseña</label>
+        <label htmlFor="password">PIN o contraseña</label>
         <Input
           id="password"
           type="password"

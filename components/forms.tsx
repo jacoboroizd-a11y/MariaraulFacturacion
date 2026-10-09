@@ -211,10 +211,14 @@ export function EntityForm({
             ] as Field[])
           : ([
               { key: "name", label: "Nombre", required: true },
-              { key: "email", label: "Correo", type: "email", required: true },
+              {
+                key: "username",
+                label: "Usuario corto (ej. recepcion)",
+                required: true,
+              },
               {
                 key: "password",
-                label: "Contraseña (mínimo 12 caracteres)",
+                label: "PIN personal (6 a 12 dígitos)",
                 type: "password",
                 required: true,
               },

@@ -18,16 +18,16 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
     >
       <div className="flex justify-between gap-5 border-b border-slate-100 pb-8">
         <div>
-          {company.logo && (
+          {
             <Image
               unoptimized
-              width={144}
-              height={64}
-              src={company.logo}
+              width={2833}
+              height={682}
+              src={company.logo || "/brand/mariaraul.png"}
               alt="Logo de la empresa"
-              className="max-w-36 max-h-16 object-contain mb-4"
+              className="w-64 max-w-full h-auto max-h-20 object-contain object-left mb-4"
             />
-          )}
+          }
           <h2 className="font-semibold text-lg">
             {company.tradeName || company.name}
           </h2>

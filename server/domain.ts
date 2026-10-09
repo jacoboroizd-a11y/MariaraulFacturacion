@@ -712,15 +712,20 @@ export async function createUser(ctx: Context, input: unknown) {
   const { password, role, ...data } = userSchema.parse(input);
   const passwordHash = await hash(password, 12);
   return transaction(async (tx) => {
-    if (await tx.user.findUnique({ where: { email: data.email } }))
-      throw new AppError("Ese correo ya está registrado.");
+    if (
+      (data.email &&
+        (await tx.user.findUnique({ where: { email: data.email } }))) ||
+      (data.username &&
+        (await tx.user.findUnique({ where: { username: data.username } })))
+    )
+      throw new AppError("Ese usuario o correo ya está registrado.");
     const user = await tx.user.create({
       data: {
         ...data,
         passwordHash,
         memberships: { create: { companyId: ctx.companyId, role } },
       },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, username: true },
     });
     await audit(tx, ctx, "User", user.id, "USER_CREATED", { role });
     return user;

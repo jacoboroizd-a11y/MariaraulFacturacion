@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   Document,
   Page,
@@ -69,8 +71,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   logo: {
-    maxWidth: 100,
-    maxHeight: 45,
+    maxWidth: 250,
+    maxHeight: 65,
     objectFit: "contain",
     marginBottom: 10,
   },
@@ -80,6 +82,9 @@ export async function pdfDocument(row: Row, kind: string) {
   const doc = receipt ? row.invoice! : row;
   const company = doc.companySnapshot || {};
   const customer = doc.customerSnapshot || {};
+  const logo =
+    company.logo ||
+    `data:image/png;base64,${(await readFile(join(process.cwd(), "public/brand/mariaraul.png"))).toString("base64")}`;
   const currency = doc.currency || "NIO";
   const fmt = company.dateFormat || "dd/MM/yyyy";
   const hasTax = doc.items?.some((i) => Number(i.tax) !== 0) || false;
@@ -98,9 +103,7 @@ export async function pdfDocument(row: Row, kind: string) {
       <Page size="LETTER" style={styles.page}>
         <View style={[styles.row, styles.header]}>
           <View style={{ maxWidth: "60%" }}>
-            {company.logo && (
-              <PdfImage src={company.logo} style={styles.logo} />
-            )}
+            <PdfImage src={logo} style={styles.logo} />
             <Text style={styles.company}>
               {company.tradeName || company.name}
             </Text>

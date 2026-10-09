@@ -15,8 +15,10 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
   let importRequestId = "";
   try {
     await page.goto("/login");
-    await page.getByLabel("Correo electrónico").fill("admin@ejemplo.invalid");
-    await page.getByLabel("Contraseña").fill(process.env.SEED_ADMIN_PASSWORD!);
+    await page.getByLabel("Usuario o correo").fill("admin@ejemplo.invalid");
+    await page
+      .getByLabel("PIN o contraseña")
+      .fill(process.env.SEED_ADMIN_PASSWORD!);
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
     await expect(page).toHaveURL(/dashboard/);
     const created = await page.request.post("/api/data/products", {
@@ -67,6 +69,10 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/products");
+    await expect(
+      page.getByRole("link", { name: "Tratamientos", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Catálogo completo" }).click();
     await expect(page.getByLabel("Archivo del catálogo")).toBeEnabled();
     await page.getByLabel("Archivo del catálogo").setInputFiles({
       name: "catalogo.csv",
@@ -230,6 +236,21 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     ).toBe(true);
     await page.getByRole("button", { name: `Agregar Botox ${suffix}` }).click();
     await page.getByLabel(`Unidades aplicadas de Botox ${suffix}`).fill("20");
+    for (const width of [320, 375, 390, 820]) {
+      await page.setViewportSize({ width, height: 844 });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+      expect(
+        await page
+          .getByLabel("Nombre o teléfono")
+          .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+      ).toBeGreaterThanOrEqual(16);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+
     await page.getByRole("button", { name: `Agregar Crema ${suffix}` }).click();
     await expect(page.getByText("C$ 4,050.00").first()).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -246,6 +267,14 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     expect(
       (await db.product.findUniqueOrThrow({ where: { id: cosmeticId } })).stock,
     ).toBe(5);
+    await page.goto("/reports");
+    await expect(
+      page.getByText("Cierre diario", { exact: true }),
+    ).toBeVisible();
+    await page.getByText(/Ver pagos del día/).click();
+    await expect(
+      page.getByRole("cell", { name, exact: true }).first(),
+    ).toBeVisible();
   } finally {
     await cleanupCustomer(name);
     for (const id of [productId, cosmeticId, botoxId].filter(Boolean)) {

@@ -1,3 +1,5 @@
+import { CashCloseReviews } from "@/components/cash-close-reviews";
+import { DailyClose } from "@/components/daily-close";
 import { InventorySection } from "@/components/inventory-section";
 import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
 import { db } from "@/server/db";
@@ -65,19 +67,28 @@ export default async function Module({
   searchParams,
 }: {
   params: Promise<{ module: string }>;
-  searchParams: Promise<{ start?: string; end?: string; view?: string }>;
+  searchParams: Promise<{
+    start?: string;
+    end?: string;
+    day?: string;
+    view?: string;
+  }>;
 }) {
   const { module } = await params;
   const ctx = await pageContext();
   const config = names[module];
   if (!config) notFound();
-  if ((module === "settings" || module === "audit") && ctx.role !== "ADMIN")
+  if (
+    (module === "settings" || module === "audit" || module === "reports") &&
+    ctx.role !== "ADMIN"
+  )
     redirect("/dashboard");
   if (module === "reports") {
     const filters = await searchParams;
     return (
       <>
         <Heading config={config} />
+        <DailyClose ctx={ctx} day={filters.day} />
         <Reports data={await analytics(ctx, filters.start, filters.end)} />
       </>
     );
@@ -138,7 +149,9 @@ export default async function Module({
               {users.map((u) => (
                 <div key={u.id} className="py-4 border-b border-slate-100">
                   <p className="text-sm font-medium mb-1">{u.user?.name}</p>
-                  <p className="text-xs text-slate-400 mb-3">{u.user?.email}</p>
+                  <p className="text-xs text-slate-400 mb-3">
+                    {u.user?.username || u.user?.email}
+                  </p>
                   {u.user?.id !== ctx.userId ? (
                     <MemberControls row={u} />
                   ) : (
@@ -166,12 +179,16 @@ export default async function Module({
             </Link>
           </div>
         </div>
+        <CashCloseReviews ctx={ctx} />
       </>
     );
   }
   if (module === "products") {
     const products: Row[] = serialize(await list(ctx, "products"));
-    const inventoryView = (await searchParams).view === "inventory";
+    const inventoryView = ["inventory", "cosmetics"].includes(
+      (await searchParams).view || "",
+    );
+    const treatments = products.filter((p) => p.type !== "PRODUCT");
     return (
       <>
         <Heading
@@ -179,17 +196,25 @@ export default async function Module({
           module={module}
           canWrite={ctx.role !== "VIEWER"}
         />
-        {ctx.role !== "VIEWER" && <CatalogImport products={products} />}
-        <nav aria-label="Vistas del catálogo" className="flex gap-2 mb-6">
+        {ctx.role !== "VIEWER" && (
+          <CatalogImport
+            products={products}
+            initialMode={inventoryView ? "PRODUCT" : "SERVICE"}
+          />
+        )}
+        <nav
+          aria-label="Vistas del catálogo"
+          className="flex flex-wrap gap-2 mb-6"
+        >
           {[
             {
               href: "/products",
-              label: "Tratamientos y productos",
+              label: "Tratamientos",
               active: !inventoryView,
             },
             {
-              href: "/products?view=inventory",
-              label: "Existencias y movimientos",
+              href: "/products?view=cosmetics",
+              label: "Cosméticos",
               active: inventoryView,
             },
           ].map((tab) => (
@@ -208,7 +233,7 @@ export default async function Module({
         ) : (
           <>
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-              {products.map((p) => {
+              {treatments.map((p) => {
                 const Icon =
                   p.type === "PRODUCT"
                     ? ShoppingBag
@@ -253,7 +278,7 @@ export default async function Module({
                 );
               })}
             </div>
-            {!products.length && (
+            {!treatments.length && (
               <div className="panel p-10 text-center text-slate-500 text-sm">
                 Agrega un tratamiento o importa tu lista para comenzar.
               </div>

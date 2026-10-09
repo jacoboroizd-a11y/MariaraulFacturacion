@@ -6,6 +6,7 @@ import { Package, Search, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { formatMoney } from "@/lib/money";
 import { dateLabel } from "@/lib/utils";
 import type { Row } from "@/types/view";
 export type StockEvent = {
@@ -38,7 +39,7 @@ export function Inventory({
           <p className="text-xs font-semibold tracking-widest text-emerald-700 mb-2">
             COSMÉTICOS
           </p>
-          <h1 className="text-3xl font-semibold">Inventario</h1>
+          <h2 className="text-xl font-semibold">Cosméticos</h2>
           <p className="text-sm text-slate-500 mt-2">
             Cuántas unidades tienes y cómo cambia cada existencia.
           </p>
@@ -99,6 +100,15 @@ export function Inventory({
               {p.sku}
               {!p.active ? " · Inactivo" : ""}
             </p>
+            <p className="mt-3 text-lg font-semibold text-emerald-800">
+              {formatMoney(p.price || "0", p.currency)}
+            </p>
+            <Link
+              href={`/products/${p.id}`}
+              className="text-xs text-emerald-700 underline underline-offset-4"
+            >
+              Ver ficha y precio
+            </Link>
             <p className="mt-4">
               <strong className="text-4xl">{p.stock || 0}</strong>
               <span className="text-sm text-slate-500 ml-2">unidades</span>
