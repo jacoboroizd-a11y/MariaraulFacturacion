@@ -188,45 +188,55 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
         )}
       </div>
       {(isDocument || isPayment) && (
-        <div className="px-4 pb-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-          <span>Desde</span>
-          <Input
-            type="date"
-            className="w-40 h-11"
-            aria-label="Fecha desde"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-          <span>hasta</span>
-          <Input
-            type="date"
-            className="w-40 h-11"
-            aria-label="Fecha hasta"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-          <Input
-            className="w-40 h-11"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            placeholder="Monto mínimo"
-            aria-label="Monto mínimo"
-            value={min}
-            onChange={(e) => setMin(e.target.value)}
-          />
-          <Input
-            className="w-40 h-11"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            placeholder="Monto máximo"
-            aria-label="Monto máximo"
-            value={max}
-            onChange={(e) => setMax(e.target.value)}
-          />
+        <div className="px-4 pb-4 grid grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-medium text-slate-600">
+          <label className="space-y-2">
+            <span className="block">Desde</span>
+            <Input
+              type="date"
+              className="w-full h-11 text-slate-700"
+              aria-label="Fecha desde"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="block">Hasta</span>
+            <Input
+              type="date"
+              className="w-full h-11 text-slate-700"
+              aria-label="Fecha hasta"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="block">Monto mínimo</span>
+            <Input
+              className="w-full h-11 text-slate-700"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="Monto mínimo"
+              aria-label="Monto mínimo"
+              value={min}
+              onChange={(e) => setMin(e.target.value)}
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="block">Monto máximo</span>
+            <Input
+              className="w-full h-11 text-slate-700"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="Monto máximo"
+              aria-label="Monto máximo"
+              value={max}
+              onChange={(e) => setMax(e.target.value)}
+            />
+          </label>
         </div>
       )}
       <div className="overflow-x-auto">

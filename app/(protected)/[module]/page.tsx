@@ -1,3 +1,4 @@
+import { InventorySection } from "@/components/inventory-section";
 import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
 import { db } from "@/server/db";
 import Link from "next/link";
@@ -22,8 +23,9 @@ const names: Record<
     new: "Nuevo cliente",
   },
   products: {
-    title: "Tratamientos y cosméticos",
-    description: "Precios, tratamientos individuales y paquetes de sesiones.",
+    title: "Catálogo e inventario",
+    description:
+      "Tratamientos, cosméticos, precios y existencias en un solo lugar.",
     new: "Agregar al catálogo",
   },
   quotes: {
@@ -63,7 +65,7 @@ export default async function Module({
   searchParams,
 }: {
   params: Promise<{ module: string }>;
-  searchParams: Promise<{ start?: string; end?: string }>;
+  searchParams: Promise<{ start?: string; end?: string; view?: string }>;
 }) {
   const { module } = await params;
   const ctx = await pageContext();
@@ -169,6 +171,7 @@ export default async function Module({
   }
   if (module === "products") {
     const products: Row[] = serialize(await list(ctx, "products"));
+    const inventoryView = (await searchParams).view === "inventory";
     return (
       <>
         <Heading
@@ -177,56 +180,85 @@ export default async function Module({
           canWrite={ctx.role !== "VIEWER"}
         />
         {ctx.role !== "VIEWER" && <CatalogImport products={products} />}
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-          {products.map((p) => {
-            const Icon =
-              p.type === "PRODUCT"
-                ? ShoppingBag
-                : (p.sessions || 1) > 1
-                  ? Layers
-                  : Sparkles;
-            return (
-              <Link
-                href={`/products/${p.id}`}
-                key={p.id}
-                className="panel p-6 hover:border-emerald-500 transition-colors"
-              >
-                <div className="flex justify-between items-center">
-                  <span
-                    className={`p-4 rounded-2xl ${p.type === "PRODUCT" ? "bg-amber-50 text-amber-600" : "bg-violet-50 text-violet-600"}`}
+        <nav aria-label="Vistas del catálogo" className="flex gap-2 mb-6">
+          {[
+            {
+              href: "/products",
+              label: "Tratamientos y productos",
+              active: !inventoryView,
+            },
+            {
+              href: "/products?view=inventory",
+              label: "Existencias y movimientos",
+              active: inventoryView,
+            },
+          ].map((tab) => (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              aria-current={tab.active ? "page" : undefined}
+              className={`rounded-xl px-4 py-3 text-sm ${tab.active ? "bg-emerald-100 text-emerald-900 font-semibold" : "text-slate-600 hover:bg-white"}`}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
+        {inventoryView ? (
+          <InventorySection />
+        ) : (
+          <>
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+              {products.map((p) => {
+                const Icon =
+                  p.type === "PRODUCT"
+                    ? ShoppingBag
+                    : (p.sessions || 1) > 1
+                      ? Layers
+                      : Sparkles;
+                return (
+                  <Link
+                    href={`/products/${p.id}`}
+                    key={p.id}
+                    className="panel p-6 hover:border-emerald-500 transition-colors"
                   >
-                    <Icon size={28} />
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {!p.active
-                      ? "Inactivo"
-                      : p.type === "PRODUCT"
-                        ? "Cosmético"
-                        : "Tratamiento"}
-                  </span>
-                </div>
-                <h2 className="font-semibold text-lg mt-5">{p.name}</h2>
-                <p className="text-emerald-800 text-xl font-semibold mt-3">
-                  {formatMoney(p.price || "0", p.currency)}
-                  {p.pricingMode === "PER_UNIT" && (
-                    <span className="text-xs font-normal"> / {p.unit}</span>
-                  )}
-                </p>
-                <p className="text-xs text-slate-500 mt-3">
-                  {p.type === "PRODUCT"
-                    ? `${p.stock || 0} unidades disponibles`
-                    : p.pricingMode === "PER_UNIT"
-                      ? "Total automático según unidades aplicadas"
-                      : `${p.sessions || 1} sesiones incluidas`}
-                </p>
-              </Link>
-            );
-          })}
-        </div>
-        {!products.length && (
-          <div className="panel p-10 text-center text-slate-500 text-sm">
-            Agrega un tratamiento o importa tu lista para comenzar.
-          </div>
+                    <div className="flex justify-between items-center">
+                      <span
+                        className={`p-4 rounded-2xl ${p.type === "PRODUCT" ? "bg-amber-50 text-amber-600" : "bg-violet-50 text-violet-600"}`}
+                      >
+                        <Icon size={28} />
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {!p.active
+                          ? "Inactivo"
+                          : p.type === "PRODUCT"
+                            ? "Cosmético"
+                            : "Tratamiento"}
+                      </span>
+                    </div>
+                    <h2 className="font-semibold text-lg mt-5">{p.name}</h2>
+                    <p className="text-emerald-800 text-xl font-semibold mt-3">
+                      {formatMoney(p.price || "0", p.currency)}
+                      {p.pricingMode === "PER_UNIT" && (
+                        <span className="text-xs font-normal"> / {p.unit}</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-3">
+                      {p.type === "PRODUCT"
+                        ? `${p.stock || 0} unidades disponibles`
+                        : p.pricingMode === "PER_UNIT"
+                          ? "Total automático según unidades aplicadas"
+                          : `${p.sessions || 1} sesiones incluidas`}
+                    </p>
+                  </Link>
+                );
+              })}
+            </div>
+            {!products.length && (
+              <div className="panel p-10 text-center text-slate-500 text-sm">
+                Agrega un tratamiento o importa tu lista para comenzar.
+              </div>
+            )}
+          </>
         )}
       </>
     );

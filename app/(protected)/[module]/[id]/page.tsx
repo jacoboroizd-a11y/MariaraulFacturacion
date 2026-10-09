@@ -11,6 +11,7 @@ import { PaymentForm } from "@/components/payment-form";
 import { DataTable } from "@/components/table";
 import { InlinePayment } from "@/components/inline-payment";
 import { AppointmentForm, SessionButton } from "@/components/clinic-followup";
+import { SendDocument } from "@/components/send-document";
 import { PrintButton } from "@/components/print-button";
 import { Button } from "@/components/ui/button";
 import { formatMoney, decimal } from "@/lib/money";
@@ -369,6 +370,11 @@ export default async function DetailPage({
           )}
         </div>
       </div>
+      {(module === "invoices" || module === "receipts") && (
+        <div className="panel p-5 mb-5 no-print">
+          <SendDocument row={row} kind={module} />
+        </div>
+      )}
       <DocumentView row={row} kind={module} />
       {module === "invoices" &&
         writable &&

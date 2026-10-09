@@ -31,8 +31,7 @@ const nav = [
   { href: "/appointments", label: "Citas", icon: CalendarDays },
   { href: "/sessions", label: "Sesiones y seguimiento", icon: CalendarDays },
   { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/inventory", label: "Inventario", icon: Package },
-  { href: "/products", label: "Tratamientos y cosméticos", icon: Package },
+  { href: "/products", label: "Catálogo e inventario", icon: Package },
 ];
 const moreNav = [
   { href: "/quotes", label: "Cotizaciones", icon: FileText },

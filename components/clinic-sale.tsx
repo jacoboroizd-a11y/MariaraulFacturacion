@@ -20,6 +20,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { DocumentView } from "./document-view";
 import { InlinePayment } from "./inline-payment";
+import { SendDocument } from "./send-document";
 import { PrintButton } from "./print-button";
 import {
   calculateDocument,
@@ -233,6 +234,9 @@ export function ClinicSale({ options }: { options: Options }) {
               Nueva factura
             </Button>
           </div>
+        </div>
+        <div className="panel p-5 mb-5 no-print">
+          <SendDocument row={saved} kind="invoices" />
         </div>
         <DocumentView row={saved} kind="invoices" />
         <InlinePayment
