@@ -80,3 +80,11 @@ El dashboard es la pantalla de inicio: ventas, cobros, saldos, clientes, tratami
 Selecciona un mes y descarga el Excel desde el dashboard. Sesiones realizadas usa la fecha y hora de cada visita marcada como realizada, en Nicaragua. Tratamientos facturados usa el mes de la fecha del comprobante y muestra la hora de registro. Comprar un paquete no implica haber realizado sus sesiones.
 
 Las plantillas Excel incluyen Datos (la hoja a llenar), Instrucciones y Ejemplos. Los ejemplos no se importan ni fijan tus precios. Usa un SKU estable por artículo y presentación: EST-BTX-001, LAS-DEP-001, COS-CRE-001. Reutiliza el mismo SKU al actualizar precios o stock. Lotes, caducidad y precios no forman parte del código.
+
+## Google Calendar
+
+Aplica docs/conectar-google-calendar-neon.sql antes de desplegar la conexión. En Configuración → Google Calendar pega la dirección secreta iCal (Google Calendar → Configuración → calendario de la clínica → Integrar el calendario). No hagas público el calendario y no compartas el enlace por chat. Se cifra con la clave de sesión; si rotas AUTH_SECRET, vuelve a conectar. Solo ADMIN puede conectar o desconectar. El calendario queda vinculado a la empresa actual y sus citas se consultan en Citas. Se actualiza al recargar; Google Calendar continúa siendo el lugar para crear, editar o cancelar esas citas. La conexión no escribe en Google ni convierte automáticamente citas en facturas.
+
+## Comprobantes impresos
+
+Facturas, recibos y cotizaciones se exportan como PDF Carta vertical (8.5 × 11 pulgadas), con logo, detalle, importes, forma de pago y próxima cita. En impresión del navegador se propone el mismo tamaño mediante CSS; verifica el papel y desactiva los encabezados/pies del navegador. El PDF mantiene el tamaño y la composición independientemente del navegador. Los comprobantes habituales caben en una hoja; los documentos largos continúan en otra página sin cortar sus filas.

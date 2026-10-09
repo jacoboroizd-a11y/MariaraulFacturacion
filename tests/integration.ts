@@ -1,6 +1,10 @@
 import "dotenv/config";
 import ExcelJS from "exceljs";
 import { clinicReport } from "../server/clinic-report";
+import {
+  saveGoogleCalendar,
+  googleCalendarEvents,
+} from "../server/google-calendar";
 import { monthRange } from "../server/clinic-overview";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -338,6 +342,54 @@ async function main() {
     savedItems[0].sessionsTotal === 6 && savedItems[1].sessionsTotal === 0,
     "Paquete multiplica sesiones; cosmético no crea sesiones",
   );
+  await rejected(
+    () => saveGoogleCalendar(viewer, { url: "" }),
+    "Consulta no modifica conexión de calendario",
+  );
+  await rejected(
+    () => saveGoogleCalendar({ ...ctx, role: "BILLING" }, { url: "" }),
+    "Solo administrador conecta Google Calendar",
+  );
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () =>
+      new Response(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:clinic-test\r\nDTSTART:20261009T160000Z\r\nDTEND:20261009T170000Z\r\nSUMMARY:Cita de prueba\r\nEND:VEVENT\r\nEND:VCALENDAR",
+      )) as typeof fetch;
+    const feed =
+      "https://calendar.google.com/calendar/ical/test%40example.invalid/private-test123/basic.ics";
+    await saveGoogleCalendar(ctx, { url: feed });
+    const stored = await db.calendarConnection.findUniqueOrThrow({
+      where: { companyId: ctx.companyId },
+    });
+    check(
+      !stored.encryptedUrl.includes("calendar.google.com"),
+      "Dirección del calendario se guarda cifrada",
+    );
+    const calendar = await googleCalendarEvents(ctx, "2026-10");
+    check(
+      calendar.connected && calendar.events[0].title === "Cita de prueba",
+      "Calendario conectado muestra sus citas",
+    );
+    check(
+      !(await googleCalendarEvents(other, "2026-10")).connected,
+      "Conexiones de calendario aisladas por empresa",
+    );
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { companyId: ctx.companyId, action: "GOOGLE_CALENDAR_CONNECTED" },
+    });
+    check(
+      !JSON.stringify(log).includes(feed),
+      "Auditoría no expone el enlace privado",
+    );
+    await saveGoogleCalendar(ctx, { url: "" });
+    check(
+      !(await googleCalendarEvents(ctx, "2026-10")).connected,
+      "Desconectar elimina la conexión sin modificar citas locales",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
   const requestId = randomUUID();
   await recordSession(ctx, savedItems[0].id, { requestId });
   await recordSession(ctx, savedItems[0].id, { requestId });

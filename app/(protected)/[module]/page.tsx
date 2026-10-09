@@ -1,3 +1,5 @@
+import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
+import { db } from "@/server/db";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Plus, ArrowRight, Sparkles, ShoppingBag, Layers } from "lucide-react";
@@ -79,6 +81,12 @@ export default async function Module({
     );
   }
   if (module === "settings") {
+    const calendarConnected = Boolean(
+      await db.calendarConnection.findUnique({
+        where: { companyId: ctx.companyId },
+        select: { companyId: true },
+      }),
+    );
     const opts = await options(ctx);
     const users: Row[] = serialize(await list(ctx, "users"));
     const taxes: Row[] = serialize(await list(ctx, "taxes"));
@@ -88,6 +96,7 @@ export default async function Module({
         <div className="grid xl:grid-cols-[3fr_2fr] gap-6">
           <SettingsForm company={opts.company} />
           <div className="space-y-6">
+            <GoogleCalendarSettings connected={calendarConnected} />
             <div className="panel p-6">
               <h2 className="font-semibold mb-2">Impuestos</h2>
               <p className="text-sm text-slate-500 mb-5">

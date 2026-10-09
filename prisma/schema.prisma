@@ -80,6 +80,7 @@ model LoginAttempt {
 }
 
 model Company {
+  calendarConnection CalendarConnection?
   id          String           @id @default(cuid())
   name        String
   tradeName   String           @default("")
@@ -375,4 +376,11 @@ model AuditLog {
 
   @@index([companyId, timestamp])
   @@index([companyId, entityType, entityId])
+}
+
+model CalendarConnection {
+  companyId String @id
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  encryptedUrl String
+  updatedAt DateTime @updatedAt
 }

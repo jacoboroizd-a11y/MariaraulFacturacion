@@ -1,3 +1,4 @@
+import { googleCalendarEvents } from "@/server/google-calendar";
 import Link from "next/link";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { pageContext } from "@/server/auth";
@@ -18,6 +19,7 @@ export default async function AppointmentsPage({
     ? params.month!
     : todayString().slice(0, 7);
   const range = monthRange(month);
+  const google = await googleCalendarEvents(ctx, month);
   const appointments = await db.invoice.findMany({
     where: {
       companyId: ctx.companyId,
@@ -42,6 +44,16 @@ export default async function AppointmentsPage({
       timeZone: "America/Managua",
       day: "2-digit",
     }).format(d);
+  const eventOnDay = (event: { start: string; end: string }, day: string) => {
+    const start = new Date(`${month}-${day}T00:00:00-06:00`);
+    return (
+      new Date(event.start).getTime() < start.getTime() + 86400000 &&
+      new Date(event.end) > start
+    );
+  };
+  const external = google.events.filter(
+    (e) => !selectedDay || eventOnDay(e, selectedDay),
+  );
   const shown = appointments.filter(
     (a) => !selectedDay || dayOf(a.nextAppointment!) === selectedDay,
   );
@@ -66,6 +78,26 @@ export default async function AppointmentsPage({
           </Button>
         )}
       </div>
+      <div className="panel p-4 mb-5 flex flex-wrap justify-between gap-3 text-sm">
+        <p>
+          {google.connected
+            ? "Google Calendar conectado · Solo lectura"
+            : "Conecta Google Calendar para ver aquí las citas de tu clínica."}
+        </p>
+        {ctx.role === "ADMIN" && (
+          <Link href="/settings" className="text-emerald-700">
+            {google.connected ? "Administrar conexión" : "Conectar calendario"}
+          </Link>
+        )}
+      </div>
+      {google.error && (
+        <p
+          role="alert"
+          className="rounded-xl bg-amber-50 p-4 mb-5 text-sm text-amber-800"
+        >
+          {google.error}
+        </p>
+      )}
       <div className="grid xl:grid-cols-[320px_1fr] gap-6 items-start">
         <section className="panel p-5">
           <div className="flex justify-between items-center mb-5">
@@ -102,9 +134,10 @@ export default async function AppointmentsPage({
             ))}
             {Array.from({ length: days }, (_, i) => {
               const day = String(i + 1).padStart(2, "0");
-              const count = appointments.filter(
-                (a) => dayOf(a.nextAppointment!) === day,
-              ).length;
+              const count =
+                appointments.filter((a) => dayOf(a.nextAppointment!) === day)
+                  .length +
+                google.events.filter((e) => eventOnDay(e, day)).length;
               return (
                 <Link
                   key={day}
@@ -124,13 +157,34 @@ export default async function AppointmentsPage({
             href={`/appointments?month=${month}`}
             className="block text-center mt-5 text-xs text-emerald-700"
           >
-            Ver todas las citas del mes ({appointments.length})
+            Ver todas las citas del mes (
+            {appointments.length + google.events.length})
           </Link>
         </section>
         <section className="space-y-4">
           <h2 className="font-semibold">
             {selectedDay ? `Citas del ${selectedDay}` : "Citas del mes"}
           </h2>
+          {external.map((event) => (
+            <article
+              key={event.id}
+              className="panel p-5 border-l-4 border-l-emerald-300"
+            >
+              <p className="text-xs text-emerald-700">
+                Google Calendar ·{" "}
+                {event.allDay ? "Todo el día" : appointmentLabel(event.start)}
+              </p>
+              <h3 className="text-lg font-semibold mt-2">{event.title}</h3>
+              <a
+                href="https://calendar.google.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-emerald-700 inline-block mt-3"
+              >
+                Abrir Google Calendar
+              </a>
+            </article>
+          ))}
           {shown.length ? (
             shown.map((a) => (
               <article key={a.id} className="panel p-5">
@@ -178,7 +232,7 @@ export default async function AppointmentsPage({
             <div className="panel p-8 text-center">
               <CalendarDays size={32} className="mx-auto text-emerald-300" />
               <p className="text-sm text-slate-500 mt-4">
-                No hay citas en este periodo.
+                No hay citas locales en este periodo.
               </p>
               <p className="text-xs text-slate-400 mt-2">
                 Agenda la próxima visita al guardar una factura o desde el
