@@ -27,6 +27,12 @@ export default async function DetailPage({
   const { module, id } = await params;
   const query = await searchParams;
   const ctx = await pageContext();
+  if (ctx.role === "ACCOUNTANT") redirect("/accounting");
+  if (
+    ctx.role !== "ADMIN" &&
+    ["products", "taxes", "users", "quotes"].includes(module)
+  )
+    redirect("/");
   const writable = ctx.role !== "VIEWER";
   if (
     ![
@@ -42,6 +48,7 @@ export default async function DetailPage({
     notFound();
   if ((id === "new" || query.edit) && !writable) redirect("/" + module);
   if (module === "taxes" && ctx.role !== "ADMIN") redirect("/dashboard");
+  if (id === "new" && module === "invoices") redirect("/sales");
   if (id === "new") {
     const opts = await options(ctx);
     if (module === "quotes" || module === "invoices")
@@ -168,13 +175,8 @@ export default async function DetailPage({
           <h2 className="font-semibold">Información general</h2>
           <dl className="grid sm:grid-cols-3 gap-5 mt-5 text-sm">
             {[
-              { label: "Razón social", value: row.legalName },
-              { label: "Nombre comercial", value: row.tradeName },
-              { label: "RUC / Cédula", value: row.ruc },
               { label: "Correo", value: row.email },
               { label: "Teléfono", value: row.phone },
-              { label: "Dirección", value: row.address },
-              { label: "Ciudad", value: row.city },
               { label: "Notas", value: row.notes },
               { label: "Estado", value: row.active ? "Activo" : "Inactivo" },
             ].map((x) => (
@@ -298,7 +300,7 @@ export default async function DetailPage({
               PDF
             </a>
           </Button>
-          {writable && module !== "receipts" && (
+          {ctx.role === "ADMIN" && module !== "receipts" && (
             <>
               {((module === "invoices" && row.status === "DRAFT") ||
                 (module === "quotes" && row.status !== "CONVERTED")) && (
@@ -398,7 +400,7 @@ export default async function DetailPage({
                     {(item.sessionsTotal || 0) - (item.sessionsUsed || 0)}{" "}
                     sesiones disponibles
                   </span>
-                  <SessionButton item={item} />
+                  {ctx.role === "ADMIN" && <SessionButton item={item} />}
                 </div>
               ))}
             <AppointmentForm invoice={row} />
@@ -440,7 +442,7 @@ export default async function DetailPage({
                       </Link>
                     </td>
                     <td>
-                      {writable && (
+                      {ctx.role === "ADMIN" && (
                         <ActionButton
                           path={"payments/" + p.id}
                           label="Eliminar pago"

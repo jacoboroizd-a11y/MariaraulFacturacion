@@ -1,8 +1,12 @@
 "use client";
+import { useHydrated } from "@/hooks/use-hydrated";
+import { PhoneField } from "./phone-field";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Syringe,
+  Glasses,
   Search,
   Sparkles,
   ShoppingBag,
@@ -33,6 +37,7 @@ import type { Options, Row } from "@/types/view";
 type CartItem = { productId: string; quantity: number };
 export function ClinicSale({ options }: { options: Options }) {
   const router = useRouter();
+  const hydrated = useHydrated();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -43,6 +48,7 @@ export function ClinicSale({ options }: { options: Options }) {
   const [phone, setPhone] = useState("");
   const [customer, setCustomer] = useState<Row | null>(null);
   const [paymentMode, setPaymentMode] = useState("FULL");
+  const [advanceIds, setAdvanceIds] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("CASH");
   const [nextAppointment, setNextAppointment] = useState("");
@@ -72,20 +78,31 @@ export function ClinicSale({ options }: { options: Options }) {
     };
   });
   const totals = calculateDocument(lines);
-  const incoming =
-    paymentMode === "FULL"
-      ? totals.total
-      : paymentMode === "LATER"
-        ? "0"
-        : amount || "0";
+  const advances = customer?.advances || [];
+  const applied = advances
+    .filter((a) => advanceIds.includes(a.id))
+    .reduce(
+      (sum, a) =>
+        sum.plus(
+          convertCurrency(
+            a.amount || "0",
+            a.currency || "USD",
+            currency,
+            options.company.settings.exchangeRate,
+          ),
+        ),
+      decimal("0"),
+    );
+  const payable = decimal(totals.total).minus(applied).toFixed(2);
+  const incoming = paymentMode === "FULL" ? payable : amount || "0";
   let validAmount = true,
-    balance = totals.total;
+    balance = payable;
   try {
-    balance = decimal(totals.total).minus(incoming).toFixed(2);
+    balance = decimal(payable).minus(incoming).toFixed(2);
     validAmount =
       paymentMode !== "PARTIAL" ||
       (decimal(incoming).gt(0) &&
-        decimal(incoming).lt(totals.total) &&
+        decimal(incoming).lt(payable) &&
         decimal(incoming).decimalPlaces() <= 2);
   } catch {
     validAmount = false;
@@ -138,7 +155,11 @@ export function ClinicSale({ options }: { options: Options }) {
     if (lock.current) return;
     if (
       !submission.current &&
-      (!cart.length || !validAmount || (!customer && !clientName.trim()))
+      (!cart.length ||
+        !validAmount ||
+        decimal(payable).lt(0) ||
+        (paymentMode === "PARTIAL" && !nextAppointment) ||
+        (!customer && !clientName.trim()))
     )
       return;
     lock.current = true;
@@ -156,6 +177,7 @@ export function ClinicSale({ options }: { options: Options }) {
                   newCustomer: { name: clientName.trim(), phone: phone.trim() },
                 }),
             items: cart,
+            advanceIds,
             currency,
             paymentMode,
             amount: amount || "0",
@@ -186,6 +208,7 @@ export function ClinicSale({ options }: { options: Options }) {
             "La venta se guardó. Reintenta para abrir el comprobante.",
         );
       setSaved(document);
+      router.refresh();
       setRetryPending(false);
       toast.success("Factura guardada y cliente registrado");
     } catch (error) {
@@ -274,13 +297,13 @@ export function ClinicSale({ options }: { options: Options }) {
       </div>
       <form onSubmit={save}>
         <fieldset
-          disabled={busy || retryPending}
+          disabled={!hydrated || busy || retryPending}
           className="grid xl:grid-cols-[1fr_390px] gap-6 items-start"
         >
           <section className="space-y-5">
             <div className="panel p-5">
               <label htmlFor="catalogSearch" className="sr-only">
-                Buscar tratamiento o cosmético
+                Buscar tratamiento o producto
               </label>
               <div className="relative">
                 <Search
@@ -289,7 +312,7 @@ export function ClinicSale({ options }: { options: Options }) {
                 />
                 <Input
                   id="catalogSearch"
-                  placeholder="Buscar tratamiento o cosmético…"
+                  placeholder="Buscar tratamiento o producto…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className="pl-10"
@@ -302,7 +325,7 @@ export function ClinicSale({ options }: { options: Options }) {
                   { id: "AESTHETIC", label: "Estéticos" },
                   { id: "LASER", label: "Láser" },
                   { id: "PACKAGES", label: "Paquetes" },
-                  { id: "PRODUCT", label: "Cosméticos" },
+                  { id: "PRODUCT", label: "Cuidado personal y cosméticos" },
                 ].map((t) => (
                   <button
                     type="button"
@@ -331,7 +354,11 @@ export function ClinicSale({ options }: { options: Options }) {
                 const Icon = isPackage
                   ? Layers
                   : p.type === "SERVICE"
-                    ? Sparkles
+                    ? /botox|toxina/i.test(p.name || "")
+                      ? Syringe
+                      : /l[aá]ser/i.test(p.category || "")
+                        ? Glasses
+                        : Sparkles
                     : ShoppingBag;
                 return (
                   <button
@@ -343,7 +370,7 @@ export function ClinicSale({ options }: { options: Options }) {
                     className="panel p-3 sm:p-5 min-w-0 text-left hover:border-emerald-500 hover:shadow-md transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <div
-                      className={`rounded-2xl h-12 sm:h-20 flex items-center justify-center mb-4 ${isPackage ? "bg-violet-50 text-violet-600" : p.type === "SERVICE" ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-600"}`}
+                      className={`rounded-2xl h-12 sm:h-20 flex items-center justify-center mb-4 ${isPackage ? "bg-emerald-50 text-emerald-700" : p.type === "SERVICE" ? "bg-emerald-50 text-emerald-700" : "bg-emerald-50 text-emerald-700"}`}
                     >
                       <Icon size={36} strokeWidth={1.5} />
                     </div>
@@ -448,6 +475,7 @@ export function ClinicSale({ options }: { options: Options }) {
                           key={c.id}
                           onClick={() => {
                             setCustomer(c);
+                            setAdvanceIds([]);
                             setClientName(c.name || "");
                             setPhone(c.phone || "");
                           }}
@@ -464,12 +492,10 @@ export function ClinicSale({ options }: { options: Options }) {
                   <label htmlFor="salePhone" className="mt-4">
                     Teléfono (opcional)
                   </label>
-                  <Input
+                  <PhoneField
                     id="salePhone"
-                    type="tel"
-                    maxLength={100}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={setPhone}
                   />
                 </>
               )}
@@ -480,7 +506,7 @@ export function ClinicSale({ options }: { options: Options }) {
             className="panel p-5 xl:sticky xl:top-5 space-y-5 scroll-mt-5"
           >
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Tu venta</h2>
+              <h2 className="text-lg font-semibold">Tu factura</h2>
               <select
                 aria-label="Moneda de la venta"
                 className="w-24"
@@ -517,7 +543,7 @@ export function ClinicSale({ options }: { options: Options }) {
                       </button>
                     </div>
                     {p.type === "SERVICE" && (
-                      <p className="text-xs text-violet-600 mt-1">
+                      <p className="text-xs text-emerald-700 mt-1">
                         {p.pricingMode === "PER_UNIT"
                           ? 1
                           : (p.sessions || 1) * item.quantity}{" "}
@@ -600,6 +626,36 @@ export function ClinicSale({ options }: { options: Options }) {
                 {formatMoney(totals.total, currency)}
               </strong>
             </div>
+            {advances.length > 0 && (
+              <section className="rounded-xl bg-emerald-50 p-4 space-y-3">
+                <h3 className="font-semibold text-sm">
+                  Aplicar adelantos disponibles
+                </h3>
+                {advances.map((a) => (
+                  <label key={a.id} className="flex gap-2 items-center text-sm">
+                    <input
+                      type="checkbox"
+                      checked={advanceIds.includes(a.id)}
+                      onChange={(e) =>
+                        setAdvanceIds(
+                          e.target.checked
+                            ? [...advanceIds, a.id]
+                            : advanceIds.filter((id) => id !== a.id),
+                        )
+                      }
+                    />
+                    {formatMoney(a.amount || "0", a.currency)} ·{" "}
+                    {a.paymentDate?.slice(0, 10)}
+                  </label>
+                ))}
+                <p className="text-xs">
+                  Se aplica al saldo; el precio del tratamiento se conserva.
+                </p>
+                <p className="text-sm font-semibold">
+                  Por cobrar hoy: {formatMoney(payable, currency)}
+                </p>
+              </section>
+            )}
             <div>
               <label htmlFor="salePayment">Cobro</label>
               <select
@@ -608,8 +664,9 @@ export function ClinicSale({ options }: { options: Options }) {
                 onChange={(e) => setPaymentMode(e.target.value)}
               >
                 <option value="FULL">Pago completo</option>
-                <option value="PARTIAL">Abono / adelanto</option>
-                <option value="LATER">Cobrar después</option>
+                <option value="PARTIAL">
+                  Pago + saldo para siguiente cita
+                </option>
               </select>
             </div>
             {paymentMode === "PARTIAL" && (
@@ -619,7 +676,7 @@ export function ClinicSale({ options }: { options: Options }) {
                   id="saleAmount"
                   type="number"
                   min="0.01"
-                  max={Math.max(0, Number(totals.total) - 0.01)}
+                  max={Math.max(0, Number(payable) - 0.01)}
                   step="0.01"
                   required
                   value={amount}
@@ -695,6 +752,8 @@ export function ClinicSale({ options }: { options: Options }) {
                 (!retryPending &&
                   (!cart.length ||
                     !validAmount ||
+                    decimal(payable).lt(0) ||
+                    (paymentMode === "PARTIAL" && !nextAppointment) ||
                     (!customer && !clientName.trim())))
               }
             >

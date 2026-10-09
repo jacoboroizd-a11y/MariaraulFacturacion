@@ -2,20 +2,20 @@ import { z } from "zod";
 import { transaction } from "./db";
 import { type Context, authorize, AppError } from "./auth";
 import { decimal, amount } from "@/lib/money";
-import { todayString } from "@/lib/utils";
+import { clinicClock } from "@/lib/clinic-time";
+import { assertCashOpen, cashTotals, cashExpenses } from "./cash-register";
 const money = z.string().regex(/^\d{1,12}(\.\d{1,2})?$/);
+const count = z.object({
+  opening: money,
+  out: money,
+  counted: money,
+  remaining: money.optional(),
+});
 const schema = z.object({
   requestId: z.uuid(),
-  day: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .refine(
-      (v) =>
-        !Number.isNaN(Date.parse(v)) &&
-        new Date(v).toISOString().slice(0, 10) === v,
-    ),
-  NIO: z.object({ opening: money, out: money, counted: money }),
-  USD: z.object({ opening: money, out: money, counted: money }),
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  NIO: count,
+  USD: count,
   notes: z.string().trim().max(1000).default(""),
 });
 export type CashCount = {
@@ -25,12 +25,15 @@ export type CashCount = {
   received: string;
   expected: string;
   difference: string;
+  remaining: string;
 };
 export type CloseData = {
   day: string;
+  automatic?: boolean;
   NIO: CashCount;
   USD: CashCount;
   notes: string;
+  requestId?: string;
   received: {
     method: string;
     currency: string;
@@ -38,118 +41,115 @@ export type CloseData = {
     count: number;
   }[];
 };
-export async function submitCashClose(ctx: Context, input: unknown) {
+export async function submitCashClose(
+  ctx: Context,
+  input: unknown,
+  now = new Date(),
+) {
   authorize(ctx);
   const data = schema.parse(input);
-  if (data.day > todayString())
-    throw new AppError("No puedes cerrar una fecha futura.");
   return transaction(async (tx) => {
-    const prior = await tx.auditLog.findFirst({
+    const day = await tx.cashDay.findUnique({
       where: {
-        companyId: ctx.companyId,
-        entityType: "CashClose",
-        entityId: data.requestId,
-        action: "CASH_CLOSE_SUBMITTED",
+        companyId_day: { companyId: ctx.companyId, day: new Date(data.day) },
       },
     });
-    if (prior) {
-      const saved = prior.metadata as unknown as CloseData;
-      if (
-        prior.userId !== ctx.userId ||
-        saved.day !== data.day ||
-        ["NIO", "USD"].some((currency) => {
-          const c = currency as "NIO" | "USD";
-          return ["opening", "out", "counted"].some(
-            (key) =>
-              amount(saved[c][key as keyof CashCount]) !==
-              amount(data[c][key as "opening" | "out" | "counted"]),
-          );
-        }) ||
-        saved.notes !== data.notes
-      )
-        throw new AppError("Este intento ya se guardó con otros datos.", 409);
-      return prior;
+    if (day?.status === "CLOSED") {
+      const saved = day.closeData as unknown as CloseData;
+      if (saved?.requestId === data.requestId) {
+        if (
+          saved.notes !== data.notes ||
+          ["NIO", "USD"].some((c) => {
+            const currency = c as "NIO" | "USD";
+            return ["out", "counted", "opening", "remaining"].some(
+              (key) =>
+                amount(saved[currency][key as keyof CashCount]) !==
+                amount(
+                  data[currency][key as keyof typeof data.NIO] ||
+                    data[currency].counted,
+                ),
+            );
+          })
+        )
+          throw new AppError("El cierre ya se guardó con otros datos.", 409);
+        return { id: day.id, metadata: saved };
+      }
+      throw new AppError(
+        "La caja ya está cerrada. No se puede volver a facturar ni abrir hasta el siguiente día laboral.",
+        409,
+      );
     }
-    const existing = await tx.auditLog.findFirst({
-      where: {
-        companyId: ctx.companyId,
-        entityType: "CashClose",
-        action: "CASH_CLOSE_SUBMITTED",
-        metadata: { path: ["day"], equals: data.day },
-      },
-      orderBy: { timestamp: "desc" },
-    });
-    if (existing) {
-      const review = await tx.auditLog.findFirst({
-        where: {
-          companyId: ctx.companyId,
-          entityType: "CashClose",
-          entityId: existing.id,
-          action: "CASH_CLOSE_REVIEWED",
-        },
-        orderBy: { timestamp: "desc" },
-      });
-      if (
-        (review?.metadata as { status?: string } | undefined)?.status !==
-        "REJECTED"
-      )
-        throw new AppError(
-          "Ya hay un cierre de este día pendiente o aprobado. Administración debe revisarlo antes de crear otro.",
-          409,
-        );
-    }
-    const totals = await tx.payment.groupBy({
-      by: ["method", "currency"],
-      where: {
-        companyId: ctx.companyId,
-        deletedAt: null,
-        paymentDate: new Date(data.day + "T00:00:00Z"),
-        invoice: { status: { notIn: ["VOID", "DRAFT"] } },
-      },
-      _sum: { amount: true },
-      _count: true,
-    });
+    if (data.day !== clinicClock(now).day)
+      throw new AppError("Solo puedes cerrar la caja del día actual.");
+    const opened = await assertCashOpen(tx, ctx, now);
+    if (
+      !opened.openingNIO.equals(data.NIO.opening) ||
+      !opened.openingUSD.equals(data.USD.opening)
+    )
+      throw new AppError(
+        "El fondo inicial debe coincidir con la apertura guardada.",
+      );
+    const totals = await cashTotals(tx, ctx.companyId, data.day);
+    const expenses = await cashExpenses(tx, ctx.companyId, opened.id);
+    if (
+      !decimal(data.NIO.out).equals(expenses.NIO) ||
+      !decimal(data.USD.out).equals(expenses.USD)
+    )
+      throw new AppError(
+        "Las salidas cambiaron. Recarga el cierre para incluir todos los movimientos.",
+        409,
+      );
     const cash = (currency: "NIO" | "USD"): CashCount => {
-      const counted = data[currency];
-      const received = amount(
-        totals
-          .find((t) => t.method === "CASH" && t.currency === currency)
-          ?._sum.amount?.toString() || "0",
-      );
-      const expected = amount(
-        decimal(counted.opening).plus(received).minus(counted.out),
-      );
+      const v = data[currency];
+      const received =
+        totals.find((t) => t.method === "CASH" && t.currency === currency)
+          ?.amount || "0";
+      const expected = amount(decimal(v.opening).plus(received).minus(v.out));
       if (decimal(expected).isNegative())
         throw new AppError("Las salidas superan el efectivo disponible.");
+      const remaining = v.remaining || v.counted;
+      if (decimal(remaining).gt(v.counted))
+        throw new AppError(
+          "El efectivo para mañana no puede superar el efectivo contado.",
+        );
       return {
-        ...counted,
+        ...v,
+        remaining,
         received,
         expected,
-        difference: amount(decimal(counted.counted).minus(expected)),
+        difference: amount(decimal(v.counted).minus(expected)),
       };
     };
     const metadata: CloseData = {
       day: data.day,
+      requestId: data.requestId,
       NIO: cash("NIO"),
       USD: cash("USD"),
       notes: data.notes,
-      received: totals.map((t) => ({
-        method: t.method,
-        currency: t.currency,
-        amount: amount(t._sum.amount?.toString() || "0"),
-        count: t._count,
-      })),
+      received: totals,
     };
-    return tx.auditLog.create({
+    await tx.cashDay.update({
+      where: { id: opened.id },
       data: {
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        entityType: "CashClose",
-        entityId: data.requestId,
-        action: "CASH_CLOSE_SUBMITTED",
-        metadata,
+        status: "CLOSED",
+        closedAt: now,
+        closedBy: ctx.userId,
+        automatic: false,
+        closeData: metadata,
       },
     });
+    await tx.reportDelivery.upsert({
+      where: {
+        companyId_kind_period: {
+          companyId: ctx.companyId,
+          kind: "DAILY",
+          period: data.day,
+        },
+      },
+      create: { companyId: ctx.companyId, kind: "DAILY", period: data.day },
+      update: {},
+    });
+    return { id: opened.id, metadata };
   });
 }
 export async function reviewCashClose(ctx: Context, input: unknown) {
@@ -162,36 +162,31 @@ export async function reviewCashClose(ctx: Context, input: unknown) {
     })
     .parse(input);
   return transaction(async (tx) => {
-    const close = await tx.auditLog.findFirst({
-      where: {
-        companyId: ctx.companyId,
-        id: data.reviewId,
-        entityType: "CashClose",
-        action: "CASH_CLOSE_SUBMITTED",
-      },
+    const close = await tx.cashDay.findFirst({
+      where: { companyId: ctx.companyId, id: data.reviewId, status: "CLOSED" },
     });
     if (!close) throw new AppError("Cierre no encontrado.", 404);
-    const prior = await tx.auditLog.findFirst({
-      where: {
-        companyId: ctx.companyId,
-        entityType: "CashClose",
-        entityId: close.id,
-        action: "CASH_CLOSE_REVIEWED",
-      },
-    });
-    if (prior) {
-      if ((prior.metadata as { status: string }).status !== data.status)
-        throw new AppError("El cierre ya fue revisado.", 409);
-      return prior;
+    if (close.reviewStatus !== "PENDING") {
+      if (close.reviewStatus === data.status) return close;
+      throw new AppError("El cierre ya fue revisado.", 409);
     }
-    return tx.auditLog.create({
+    await tx.auditLog.create({
       data: {
         companyId: ctx.companyId,
         userId: ctx.userId,
-        entityType: "CashClose",
+        entityType: "CashDay",
         entityId: close.id,
         action: "CASH_CLOSE_REVIEWED",
         metadata: { status: data.status, notes: data.notes },
+      },
+    });
+    return tx.cashDay.update({
+      where: { id: close.id },
+      data: {
+        reviewStatus: data.status,
+        reviewNotes: data.notes,
+        reviewedBy: ctx.userId,
+        reviewedAt: new Date(),
       },
     });
   });

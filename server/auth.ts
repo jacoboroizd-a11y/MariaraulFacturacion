@@ -69,7 +69,10 @@ export async function context(): Promise<Context> {
   };
 }
 export function authorize(ctx: Context, admin = false) {
-  if (ctx.role === "VIEWER" || (admin && ctx.role !== "ADMIN"))
+  if (
+    ["VIEWER", "ACCOUNTANT"].includes(ctx.role) ||
+    (admin && ctx.role !== "ADMIN")
+  )
     throw new AppError("No tienes permiso para realizar esta operación.", 403);
 }
 export async function login(email: string, password: string) {
@@ -156,4 +159,9 @@ export async function pageContext(): Promise<Context> {
     if (error instanceof AppError) redirect("/login");
     throw error;
   }
+}
+
+export function authorizeReports(ctx: Context) {
+  if (!["ADMIN", "ACCOUNTANT"].includes(ctx.role))
+    throw new AppError("No tienes acceso a los reportes.", 403);
 }

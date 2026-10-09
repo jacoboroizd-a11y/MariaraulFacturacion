@@ -1,3 +1,15 @@
+import { enqueueReports, deliverReports } from "../server/report-delivery";
+import { mock } from "node:test";
+import { openCash, autoCloseCash, cashState } from "../server/cash-register";
+import { recordCashMovement } from "../server/cash-movements";
+import { recordAdvance } from "../server/advances";
+import { importClients } from "../server/client-import";
+import {
+  financialReport,
+  financialExcel,
+  financialPDF,
+} from "../server/financial-report";
+import { saveAppointment } from "../server/appointments";
 import { submitCashClose, reviewCashClose } from "../server/cash-close";
 import "dotenv/config";
 import ExcelJS from "exceljs";
@@ -48,6 +60,7 @@ async function rejected(fn: () => Promise<unknown>, label: string) {
   console.log("PASS " + label);
 }
 async function main() {
+  mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-09T16:00:00Z") });
   const user = await db.user.create({
     data: {
       email: `test-${randomUUID()}@example.invalid`,
@@ -76,6 +89,14 @@ async function main() {
   const other = { ...ctx, companyId: ids[1] };
   const viewer = { ...ctx, role: "VIEWER" as const };
   const billing = { ...ctx, role: "BILLING" as const };
+  await rejected(
+    () =>
+      openCash(ctx, { NIO: "50", USD: "0" }, new Date("2026-10-09T13:59:00Z")),
+    "Antes de las 08:00 no abre caja",
+  );
+  await openCash(ctx, { NIO: "50", USD: "0" });
+  await openCash(other, { NIO: "50", USD: "0" });
+  const accountant = { ...ctx, role: "ACCOUNTANT" as const };
   const staff = await createUser(ctx, {
     name: "Recepción",
     username: "recepcion-" + randomUUID().slice(0, 8),
@@ -555,21 +576,21 @@ async function main() {
     checkoutKey: randomUUID(),
     newCustomer: undefined,
     customerId: customer.id,
-    paymentMode: "LATER",
+    paymentMode: "FULL",
     currency: "USD",
     items: [{ productId: treatment.id, quantity: 1 }],
   });
   check(
     usdSale.total.toString() === "24.66" &&
-      usdSale.amountPaid.toString() === "0",
-    "Precio se convierte desde catálogo; venta pendiente no crea pago",
+      usdSale.amountPaid.toString() === "24.66",
+    "Precio se convierte desde catálogo; el pago completo se registra",
   );
   const noPaySale = await createClinicSale(ctx, {
     ...saleInput,
     checkoutKey: randomUUID(),
     newCustomer: undefined,
     customerId: customer.id,
-    paymentMode: "LATER",
+    paymentMode: "FULL",
     items: [{ productId: treatment.id, quantity: 1 }],
   });
   const noPayItem = await db.invoiceItem.findFirstOrThrow({
@@ -654,7 +675,7 @@ async function main() {
     checkoutKey: randomUUID(),
     newCustomer: undefined,
     customerId: customer.id,
-    paymentMode: "LATER",
+    paymentMode: "FULL",
     items: [{ productId: cosmetic.id, quantity: 3 }],
   });
   check(
@@ -662,6 +683,10 @@ async function main() {
       .stock === 10,
     "Venta pendiente también descuenta mercancía entregada",
   );
+  for (const payment of await db.payment.findMany({
+    where: { invoiceId: stockSale.id, deletedAt: null },
+  }))
+    await deletePayment(ctx, payment.id);
   await documentAction(ctx, "invoices", stockSale.id, "void");
   await documentAction(ctx, "invoices", stockSale.id, "void");
   check(
@@ -733,7 +758,8 @@ async function main() {
     checkoutKey: randomUUID(),
     newCustomer: undefined,
     customerId: customer.id,
-    paymentMode: "LATER",
+    paymentMode: "PARTIAL",
+    amount: "500",
     items: [{ productId: botox.id, quantity: 20 }],
   });
   check(
@@ -762,7 +788,7 @@ async function main() {
     firstPay.id === againPay.id &&
       (
         await db.invoice.findUniqueOrThrow({ where: { id: unitSale.id } })
-      ).amountPaid.toString() === "1000",
+      ).amountPaid.toString() === "1500",
     "Reintentar pago en factura no duplica abono",
   );
   await rejected(
@@ -816,6 +842,161 @@ async function main() {
   await rejected(
     () => importCatalog(viewer, importRequest),
     "Consulta no importa catálogo",
+  );
+  const clientsRequest = {
+    requestId: randomUUID(),
+    rows: [
+      {
+        name: "Paciente Excel",
+        phone: "+50588881111",
+        email: "excel@example.invalid",
+      },
+      { name: "Duplicado", phone: "+50588881111", email: "" },
+    ],
+  };
+  const importedClients = (await importClients(ctx, clientsRequest)) as {
+    added: number;
+    skipped: number;
+  };
+  check(
+    importedClients.added === 1 && importedClients.skipped === 1,
+    "Clientes importados sin duplicar teléfono",
+  );
+  await rejected(
+    () => importClients(billing, clientsRequest),
+    "Personal de facturación no importa clientes",
+  );
+  const deposit = await recordAdvance(billing, {
+    requestId: randomUUID(),
+    customerId: customer.id,
+    amount: "10",
+    currency: "USD",
+    method: "CASH",
+  });
+  const depositSale = await createClinicSale(billing, {
+    ...saleInput,
+    checkoutKey: randomUUID(),
+    newCustomer: undefined,
+    customerId: customer.id,
+    items: [{ productId: treatment.id, quantity: 1 }],
+    paymentMode: "FULL",
+    advanceIds: [deposit.id],
+    currency: "USD",
+  });
+  check(
+    depositSale.total.toFixed(2) === "24.66" &&
+      depositSale.amountPaid.toFixed(2) === "24.66",
+    "Adelanto de US$10 mantiene precio y cancela saldo restante",
+  );
+  const depositPayments = await db.payment.findMany({
+    where: { invoiceId: depositSale.id },
+  });
+  check(
+    depositPayments.some(
+      (p) => p.advanceId === deposit.id && p.amount.toFixed(2) === "10.00",
+    ) &&
+      depositPayments.some(
+        (p) => !p.advanceId && p.amount.toFixed(2) === "14.66",
+      ),
+    "Adelanto aplicado separado del cobro nuevo",
+  );
+  await rejected(
+    () =>
+      createClinicSale(billing, {
+        ...saleInput,
+        checkoutKey: randomUUID(),
+        newCustomer: undefined,
+        customerId: customer.id,
+        advanceIds: [deposit.id],
+        paymentMode: "FULL",
+      }),
+    "No se aplica el mismo adelanto dos veces",
+  );
+  await rejected(
+    () => createClinicSale(accountant, saleInput),
+    "Contadora no factura",
+  );
+  await rejected(
+    () =>
+      saveProduct(billing, { name: "No permitido", sku: "DENY", price: "1" }),
+    "Personal no modifica inventario",
+  );
+  const appointmentRequest = {
+    requestId: randomUUID(),
+    title: "Paciente · Láser",
+    customerId: customer.id,
+    start: "2026-10-12T09:00",
+    end: "2026-10-12T10:00",
+  };
+  const [appointmentA, appointmentB] = await Promise.all([
+    saveAppointment(billing, appointmentRequest),
+    saveAppointment(billing, appointmentRequest),
+  ]);
+  check(appointmentA.id === appointmentB.id, "Cita idempotente no se duplica");
+  await saveAppointment(
+    billing,
+    {
+      ...appointmentRequest,
+      start: "2026-10-12T11:00",
+      end: "2026-10-12T12:00",
+      version: 1,
+    },
+    appointmentA.id,
+  );
+  await rejected(
+    () =>
+      saveAppointment(
+        billing,
+        { ...appointmentRequest, version: 1 },
+        appointmentA.id,
+      ),
+    "Edición desactualizada de cita no sobrescribe otra",
+  );
+  const report = await financialReport(accountant, "DAILY", todayString());
+  const financeBook = new ExcelJS.Workbook();
+  await financeBook.xlsx.load(
+    (await financialExcel(report)) as unknown as ExcelJS.Buffer,
+  );
+  check(
+    financeBook.worksheets.some((s) => s.name === "Cobros y adelantos"),
+    "Contadora descarga reporte detallado",
+  );
+  check(
+    (await financialPDF(report)).subarray(0, 4).toString() === "%PDF",
+    "Reporte PDF Carta se genera",
+  );
+  check(
+    report.received["USD:CASH"] === "49.32",
+    "Reporte cuenta adelantos al recibirlos sin duplicar su aplicación",
+  );
+  await rejected(
+    () => financialReport(billing, "DAILY", todayString()),
+    "Personal no consulta reportes administrativos",
+  );
+  const expense = {
+    requestId: randomUUID(),
+    amount: "20",
+    currency: "NIO",
+    reason: "Insumos",
+    purpose: "Compra de material de limpieza",
+    recipient: "Proveedor",
+  };
+  const [expenseA, expenseB] = await Promise.all([
+    recordCashMovement(billing, expense),
+    recordCashMovement(billing, expense),
+  ]);
+  check(
+    expenseA.id === expenseB.id,
+    "Salida de efectivo concurrente no se duplica",
+  );
+  await rejected(
+    () =>
+      recordCashMovement(billing, {
+        ...expense,
+        requestId: randomUUID(),
+        amount: "999999999",
+      }),
+    "Salida no supera efectivo disponible",
   );
   const cashPayments = await db.payment.findMany({
     where: {
@@ -871,27 +1052,87 @@ async function main() {
     () => reviewCashClose(other, { reviewId: closeA.id, status: "APPROVED" }),
     "Revisión aislada por empresa",
   );
-  await reviewCashClose(ctx, {
-    reviewId: closeA.id,
-    status: "REJECTED",
-    notes: "Recontar",
-  });
-  const corrected = await submitCashClose(billing, {
-    ...closeInput,
-    requestId: randomUUID(),
-    notes: "Recontado",
-  });
-  check(
-    corrected.id !== closeA.id,
-    "Corrección permitida después de revisión administrativa",
-  );
   const approval = await reviewCashClose(ctx, {
-    reviewId: corrected.id,
+    reviewId: closeA.id,
     status: "APPROVED",
   });
+  check(approval.reviewStatus === "APPROVED", "Administrador aprueba cierre");
+  const originalKey = process.env.RESEND_API_KEY,
+    originalFrom = process.env.REPORTS_FROM,
+    originalMailFetch = globalThis.fetch;
+  let emailCalls = 0;
+  const bodies: string[] = [];
+  try {
+    process.env.RESEND_API_KEY = "test-only-not-a-provider-key";
+    process.env.REPORTS_FROM = "Clinica <reportes@example.invalid>";
+    globalThis.fetch = (async (url, init) => {
+      assert.equal(url, "https://api.resend.com/emails");
+      emailCalls++;
+      bodies.push(String(init?.body));
+      if (emailCalls === 1) throw Error("Timeout simulado");
+      return Response.json({ id: "email-prueba" });
+    }) as typeof fetch;
+    await enqueueReports(ctx.companyId);
+    await deliverReports(ctx.companyId);
+    await deliverReports(ctx.companyId);
+    await deliverReports(ctx.companyId);
+    check(
+      emailCalls === 2 && bodies[0] === bodies[1],
+      "Correo reintenta payload idéntico y no duplica envíos confirmados",
+    );
+    const mail = JSON.parse(bodies[0]);
+    check(
+      mail.to[0] === "info@dramariaraul.com" && mail.attachments.length === 2,
+      "Correo diario adjunta PDF y Excel al destinatario solicitado",
+    );
+  } finally {
+    globalThis.fetch = originalMailFetch;
+    if (originalKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = originalKey;
+    if (originalFrom === undefined) delete process.env.REPORTS_FROM;
+    else process.env.REPORTS_FROM = originalFrom;
+  }
+  await rejected(
+    () => openCash(billing, { NIO: "50", USD: "0" }),
+    "No reabre después del cierre manual",
+  );
+  await rejected(
+    () =>
+      createClinicSale(billing, { ...saleInput, checkoutKey: randomUUID() }),
+    "Caja cerrada bloquea facturación",
+  );
+  await rejected(
+    () => recordCashMovement(billing, { ...expense, requestId: randomUUID() }),
+    "Caja cerrada bloquea salidas",
+  );
+  await autoCloseCash(other.companyId, new Date("2026-10-10T02:00:00Z"));
+  const automatic = await cashState(other, new Date("2026-10-12T14:00:00Z"));
   check(
-    (approval.metadata as { status: string }).status === "APPROVED",
-    "Administrador aprueba cierre",
+    automatic.missed === 1 && automatic.previous?.automatic,
+    "Cierre automático cuenta cierre manual omitido",
+  );
+  check(
+    (automatic.previous?.closeData as { NIO: { counted: unknown } }).NIO
+      .counted === null,
+    "Automático no inventa conteo de efectivo",
+  );
+  await rejected(
+    () =>
+      openCash(
+        other,
+        { NIO: "50", USD: "0" },
+        new Date("2026-10-10T14:00:00Z"),
+      ),
+    "No abre en sábado",
+  );
+  await openCash(
+    other,
+    { NIO: "50", USD: "0" },
+    new Date("2026-10-12T14:00:00Z"),
+  );
+  check(
+    (await cashState(other, new Date("2026-10-12T14:00:00Z"))).canBill,
+    "Nueva jornada habilita facturación después de apertura",
   );
   console.log(`\n${checks} comprobaciones de integración pasaron.`);
 }
@@ -900,6 +1141,11 @@ async function cleanup() {
     await db.auditLog.deleteMany({ where: { companyId } });
     await db.receipt.deleteMany({ where: { companyId } });
     await db.payment.deleteMany({ where: { companyId } });
+    await db.appointment.deleteMany({ where: { companyId } });
+    await db.customerAdvance.deleteMany({ where: { companyId } });
+    await db.cashMovement.deleteMany({ where: { companyId } });
+    await db.cashDay.deleteMany({ where: { companyId } });
+    await db.reportDelivery.deleteMany({ where: { companyId } });
     await db.invoiceItem.deleteMany({ where: { companyId } });
     await db.invoice.deleteMany({ where: { companyId } });
     await db.quoteItem.deleteMany({ where: { companyId } });

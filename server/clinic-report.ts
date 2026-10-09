@@ -1,11 +1,11 @@
 import ExcelJS from "exceljs";
 import { db } from "./db";
-import { type Context, authorize } from "./auth";
+import { type Context, authorizeReports } from "./auth";
 import { monthRange } from "./clinic-overview";
 import { dateLabel } from "@/lib/utils";
 
 export async function clinicReport(ctx: Context, month: string) {
-  authorize(ctx, true);
+  authorizeReports(ctx);
   const range = monthRange(month);
   const [events, invoiced] = await Promise.all([
     db.auditLog.findMany({

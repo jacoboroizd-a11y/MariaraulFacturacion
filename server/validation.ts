@@ -1,3 +1,4 @@
+import { normalizePhone } from "@/lib/phone";
 import { z } from "zod";
 const text = z.string().trim().max(2000).default("");
 const name = z.string().trim().min(1).max(200);
@@ -26,7 +27,17 @@ export const customerSchema = z.object({
   legalName: text,
   tradeName: text,
   ruc: text,
-  phone: text,
+  phone: text.transform((value, ctx) => {
+    try {
+      return normalizePhone(value);
+    } catch {
+      ctx.addIssue({
+        code: "custom",
+        message: "Revisa el teléfono y el prefijo del país.",
+      });
+      return z.NEVER;
+    }
+  }),
   email: z.union([z.email(), z.literal("")]).default(""),
   address: text,
   city: text,
@@ -116,7 +127,17 @@ export const settingsSchema = z
       ])
       .default(""),
     address: text,
-    phone: text,
+    phone: text.transform((value, ctx) => {
+      try {
+        return normalizePhone(value);
+      } catch {
+        ctx.addIssue({
+          code: "custom",
+          message: "Revisa el teléfono y el prefijo del país.",
+        });
+        return z.NEVER;
+      }
+    }),
     email: z.union([z.email(), z.literal("")]).default(""),
     primaryCurrency: z.enum(["NIO", "USD"]),
     secondaryCurrency: z.enum(["NIO", "USD"]),
@@ -130,6 +151,24 @@ export const settingsSchema = z
     bankInfo: text,
     terms: text,
     notes: text,
+    holidays: z
+      .string()
+      .trim()
+      .max(3000)
+      .default("")
+      .refine(
+        (value) =>
+          !value ||
+          value
+            .split(/[\s,;]+/)
+            .every(
+              (day) =>
+                /^20\d{2}-\d{2}-\d{2}$/.test(day) &&
+                !isNaN(Date.parse(day)) &&
+                new Date(day).toISOString().slice(0, 10) === day,
+            ),
+        "Usa fechas YYYY-MM-DD separadas por comas.",
+      ),
     dateFormat: z.enum(["dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd"]),
   })
   .refine(
@@ -153,7 +192,7 @@ export const userSchema = z
       )
       .optional(),
     password: z.string().min(1).max(72),
-    role: z.enum(["ADMIN", "BILLING", "VIEWER"]),
+    role: z.enum(["ADMIN", "BILLING", "VIEWER", "ACCOUNTANT"]),
   })
   .superRefine((data, ctx) => {
     if (!data.email && !data.username)

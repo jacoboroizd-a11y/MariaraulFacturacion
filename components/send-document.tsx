@@ -1,4 +1,6 @@
-import { Mail, MessageCircle, Download } from "lucide-react";
+"use client";
+import { useState, useEffect } from "react";
+import { Mail, MessageCircle, Download, Share2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { formatMoney } from "@/lib/money";
 import type { Row } from "@/types/view";
@@ -9,6 +11,22 @@ export function SendDocument({
   row: Row;
   kind: "invoices" | "receipts";
 }) {
+  const [file, setFile] = useState<File | null>(null),
+    [message, setMessage] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/pdf/${kind}/${row.id}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (response.ok)
+          setFile(
+            new File([await response.blob()], `${row.documentNumber}.pdf`, {
+              type: "application/pdf",
+            }),
+          );
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [kind, row.id, row.documentNumber]);
   const doc = kind === "receipts" ? row.invoice! : row;
   const customer = doc.customerSnapshot || {},
     company = doc.companySnapshot || {};
@@ -29,6 +47,41 @@ export function SendDocument({
   return (
     <div className="no-print space-y-3">
       <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!file}
+          onClick={async () => {
+            if (!file) return;
+            if (navigator.canShare?.({ files: [file] })) {
+              try {
+                await navigator.share({
+                  files: [file],
+                  title: `Factura ${row.documentNumber}`,
+                });
+                setMessage("PDF compartido desde el dispositivo.");
+              } catch (error) {
+                if ((error as Error).name !== "AbortError")
+                  setMessage(
+                    "No se pudo compartir. Descarga el PDF y adjúntalo en WhatsApp.",
+                  );
+              }
+            } else {
+              const url = URL.createObjectURL(file),
+                link = document.createElement("a");
+              link.href = url;
+              link.download = file.name;
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 10000);
+              setMessage(
+                "PDF descargado. Abre WhatsApp y adjunta el archivo al chat.",
+              );
+            }
+          }}
+        >
+          <Share2 size={15} />
+          Compartir PDF
+        </Button>
         <Button asChild variant="outline" size="sm">
           <a
             href={`/api/pdf/${kind}/${row.id}`}
@@ -51,9 +104,15 @@ export function SendDocument({
           </a>
         </Button>
       </div>
+      {message && (
+        <p role="status" className="text-sm text-emerald-800">
+          {message}
+        </p>
+      )}
       <p className="text-xs text-slate-500">
-        Descarga el PDF Carta y adjúntalo al mensaje antes de enviarlo. El
-        correo se abre en la aplicación predeterminada del dispositivo.
+        En iPad y móvil, Compartir PDF permite elegir WhatsApp y el contacto. En
+        otros equipos, descarga el PDF y adjúntalo. Abrir WhatsApp va al chat;
+        los enlaces no pueden adjuntar archivos.
       </p>
     </div>
   );

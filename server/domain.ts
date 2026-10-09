@@ -1,3 +1,5 @@
+import { todayString } from "@/lib/utils";
+import { assertCashOpen } from "./cash-register";
 import { Prisma } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { transaction } from "./db";
@@ -89,7 +91,7 @@ export async function saveCustomer(ctx: Context, input: unknown, id?: string) {
   });
 }
 export async function saveProduct(ctx: Context, input: unknown, id?: string) {
-  authorize(ctx);
+  authorize(ctx, true);
   const data = productSchema.parse(input);
   data.taxId = data.taxId || null;
   return transaction((tx) => saveProductTx(tx, ctx, data, id));
@@ -164,7 +166,7 @@ export async function deleteEntity(
   kind: "customers" | "products" | "taxes",
   id: string,
 ) {
-  authorize(ctx, kind === "taxes");
+  authorize(ctx, true);
   return transaction(async (tx) => {
     if (kind === "customers") {
       await scopedCustomer(tx, ctx, id);
@@ -253,7 +255,7 @@ export async function saveDocument(
   input: unknown,
   id?: string,
 ) {
-  authorize(ctx);
+  authorize(ctx, true);
   const data = documentSchema.parse(input);
   if (kind === "invoices" && !["DRAFT", "PENDING"].includes(data.status))
     throw new AppError("Estado de factura inválido.");
@@ -268,6 +270,8 @@ export async function saveDocumentTx(
   data: z.infer<typeof documentSchema>,
   id?: string,
 ) {
+  if (kind === "invoices" && data.status !== "DRAFT")
+    await assertCashOpen(tx, ctx);
   const customer = await scopedCustomer(tx, ctx, data.customerId);
   if (!customer.active) throw new AppError("El cliente está inactivo.");
   const company = await tx.company.findUniqueOrThrow({
@@ -321,7 +325,30 @@ export async function saveDocumentTx(
   ];
   if (values.some((value) => decimal(value).gte("10000000000000000")))
     throw new AppError("El documento excede el límite de importe admitido.");
-  const { items, ...totals } = computed;
+  const { items: computedItems, ...totals } = computed;
+  const catalog =
+    kind === "invoices"
+      ? await tx.product.findMany({
+          where: { companyId: ctx.companyId, id: { in: productIds } },
+          select: { id: true, type: true, category: true },
+        })
+      : [];
+  const items = computedItems.map((item) =>
+    kind === "quotes"
+      ? item
+      : {
+          ...item,
+          reportGroup:
+            catalog.find((p) => p.id === item.productId)?.type === "PRODUCT"
+              ? "SKINCARE"
+              : /l[aá]ser/i.test(
+                    catalog.find((p) => p.id === item.productId)?.category ||
+                      "",
+                  )
+                ? "LASER"
+                : "ESTHETIC",
+        },
+  );
   const base = {
     customerId: customer.id,
     date: new Date(data.date),
@@ -396,7 +423,7 @@ export async function saveDocumentTx(
   return invoice;
 }
 export async function convertQuote(ctx: Context, id: string) {
-  authorize(ctx);
+  authorize(ctx, true);
   return transaction(async (tx) => {
     const quote = await tx.quote.findFirst({
       where: { id, companyId: ctx.companyId },
@@ -404,8 +431,20 @@ export async function convertQuote(ctx: Context, id: string) {
     });
     if (!quote) throw new AppError("Cotización no encontrada.", 404);
     if (quote.invoice) return quote.invoice;
+    await assertCashOpen(tx, ctx);
     if (["REJECTED", "EXPIRED", "CONVERTED"].includes(quote.status))
       throw new AppError("La cotización no se puede convertir.");
+    const catalog = await tx.product.findMany({
+      where: {
+        companyId: ctx.companyId,
+        id: {
+          in: quote.items
+            .map((i) => i.productId)
+            .filter((id): id is string => Boolean(id)),
+        },
+      },
+      select: { id: true, type: true, category: true },
+    });
     const invoice = await tx.invoice.create({
       data: {
         companyId: ctx.companyId,
@@ -431,6 +470,14 @@ export async function convertQuote(ctx: Context, id: string) {
         items: {
           create: quote.items.map((i) => ({
             productId: i.productId,
+            reportGroup:
+              catalog.find((p) => p.id === i.productId)?.type === "PRODUCT"
+                ? "SKINCARE"
+                : /l[aá]ser/i.test(
+                      catalog.find((p) => p.id === i.productId)?.category || "",
+                    )
+                  ? "LASER"
+                  : "ESTHETIC",
             description: i.description,
             quantity: i.quantity,
             unitPrice: i.unitPrice,
@@ -462,7 +509,7 @@ export async function documentAction(
   id: string,
   action: string,
 ) {
-  authorize(ctx);
+  authorize(ctx, true);
   if (kind === "quotes" && action === "convert") return convertQuote(ctx, id);
   return transaction(async (tx) => {
     if (kind === "quotes") {
@@ -500,6 +547,7 @@ export async function documentAction(
       return { id };
     }
     if (action === "issue") {
+      await assertCashOpen(tx, ctx);
       if (invoice.status !== "DRAFT")
         throw new AppError("La factura ya fue emitida.");
       const result = await tx.invoice.update({
@@ -594,6 +642,9 @@ export async function createPaymentTx(
       return { ...previous, receipt: previous.receipt };
     }
   }
+  await assertCashOpen(tx, ctx);
+  if (data.paymentDate !== todayString())
+    throw new AppError("Los cobros se registran en la caja del día actual.");
   const balances = paymentBalance(
     invoice.total.toString(),
     invoice.amountPaid.toString(),
@@ -635,12 +686,16 @@ export async function createPaymentTx(
   return { ...payment, receipt };
 }
 export async function deletePayment(ctx: Context, id: string) {
-  authorize(ctx);
+  authorize(ctx, true);
   return transaction(async (tx) => {
     const payment = await tx.payment.findFirst({
       where: { id, companyId: ctx.companyId },
       include: { invoice: true },
     });
+    if (payment?.advanceId)
+      throw new AppError(
+        "El pago corresponde a un adelanto aplicado y no se puede eliminar como un cobro nuevo.",
+      );
     if (!payment || payment.deletedAt)
       throw new AppError("Pago no encontrado.", 404);
     await tx.payment.update({ where: { id }, data: { deletedAt: new Date() } });
@@ -739,7 +794,7 @@ export async function updateMembership(
   authorize(ctx, true);
   const data = z
     .object({
-      role: z.enum(["ADMIN", "BILLING", "VIEWER"]),
+      role: z.enum(["ADMIN", "BILLING", "VIEWER", "ACCOUNTANT"]),
       active: z.boolean(),
     })
     .parse(input);

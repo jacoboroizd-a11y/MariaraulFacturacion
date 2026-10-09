@@ -1,3 +1,5 @@
+import { syncAppointments } from "@/server/calendar-sync";
+import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -110,6 +112,8 @@ async function mutate(request: Request, { params }: Params) {
         ? await updateMembership(ctx, id, input)
         : await createUser(ctx, input);
     else throw new AppError("Acción no válida.", 404);
+    if (["sales", "appointments"].includes(kind))
+      after(() => syncAppointments(ctx.companyId));
     return NextResponse.json(result);
   } catch (e) {
     return failure(e);

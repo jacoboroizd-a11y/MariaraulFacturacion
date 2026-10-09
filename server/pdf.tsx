@@ -138,11 +138,7 @@ export async function pdfDocument(row: Row, kind: string) {
               {customer.legalName || customer.name}
             </Text>
             <Text style={styles.muted}>
-              {[
-                customer.ruc ? `RUC / Cédula: ${customer.ruc}` : "",
-                customer.address,
-                [customer.email, customer.phone].filter(Boolean).join(" · "),
-              ]
+              {[[customer.email, customer.phone].filter(Boolean).join(" · ")]
                 .filter(Boolean)
                 .join("\n")}
             </Text>

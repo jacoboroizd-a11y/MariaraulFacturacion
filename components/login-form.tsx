@@ -55,6 +55,7 @@ export function LoginForm() {
         <Input
           id="password"
           type="password"
+          inputMode="numeric"
           autoComplete="current-password"
           required
           {...register("password")}

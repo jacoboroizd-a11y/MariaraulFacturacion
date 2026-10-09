@@ -7,16 +7,20 @@ import {
 } from "../server/google-calendar";
 const calendar = (events: string) =>
   `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//ES\r\n${events}\r\nEND:VCALENDAR`;
-test("solo acepta el enlace privado de Google y rechaza otros hosts", () => {
+test("acepta enlaces ICS públicos y privados de Google y rechaza otros hosts", () => {
   expect(
     validateGoogleCalendarUrl(
       "https://calendar.google.com/calendar/ical/test%40example.invalid/private-abc123/basic.ics",
     ),
   ).toContain("calendar.google.com");
+  expect(
+    validateGoogleCalendarUrl(
+      "https://calendar.google.com/calendar/ical/a/public/basic.ics",
+    ),
+  ).toContain("public/basic.ics");
   for (const url of [
     "http://localhost/calendar",
     "https://calendar.google.com.evil.example/calendar/ical/a/private-abc/basic.ics",
-    "https://calendar.google.com/calendar/ical/a/public/basic.ics",
     "https://calendar.google.com:444/calendar/ical/a/private-abc/basic.ics",
   ])
     expect(() => validateGoogleCalendarUrl(url)).toThrow();

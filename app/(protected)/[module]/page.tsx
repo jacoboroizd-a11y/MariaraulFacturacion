@@ -1,3 +1,4 @@
+import { ClientImport } from "@/components/client-import";
 import { CashCloseReviews } from "@/components/cash-close-reviews";
 import { DailyClose } from "@/components/daily-close";
 import { InventorySection } from "@/components/inventory-section";
@@ -76,6 +77,9 @@ export default async function Module({
 }) {
   const { module } = await params;
   const ctx = await pageContext();
+  if (ctx.role === "ACCOUNTANT") redirect("/accounting");
+  if (ctx.role !== "ADMIN" && !["customers", "invoices"].includes(module))
+    redirect("/");
   const config = names[module];
   if (!config) notFound();
   if (
@@ -214,7 +218,7 @@ export default async function Module({
             },
             {
               href: "/products?view=cosmetics",
-              label: "Cosméticos",
+              label: "Cuidado personal y cosméticos",
               active: inventoryView,
             },
           ].map((tab) => (
@@ -248,7 +252,7 @@ export default async function Module({
                   >
                     <div className="flex justify-between items-center">
                       <span
-                        className={`p-4 rounded-2xl ${p.type === "PRODUCT" ? "bg-amber-50 text-amber-600" : "bg-violet-50 text-violet-600"}`}
+                        className={`p-4 rounded-2xl ${p.type === "PRODUCT" ? "bg-emerald-50 text-emerald-700" : "bg-emerald-50 text-emerald-700"}`}
                       >
                         <Icon size={28} />
                       </span>
@@ -256,7 +260,7 @@ export default async function Module({
                         {!p.active
                           ? "Inactivo"
                           : p.type === "PRODUCT"
-                            ? "Cosmético"
+                            ? "Producto"
                             : "Tratamiento"}
                       </span>
                     </div>
@@ -295,6 +299,7 @@ export default async function Module({
         module={module}
         canWrite={ctx.role !== "VIEWER"}
       />
+      {module === "customers" && ctx.role === "ADMIN" && <ClientImport />}
       <DataTable kind={module} rows={serialize(await list(ctx, module))} />
     </>
   );

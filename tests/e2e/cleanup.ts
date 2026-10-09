@@ -27,7 +27,13 @@ export async function cleanupCustomer(name: string) {
     });
     const productIds = (
       await tx.product.findMany({
-        where: { companyId: "demo-nicaragua", sku: customer.ruc },
+        where: {
+          companyId: "demo-nicaragua",
+          OR: [
+            ...(customer.ruc ? [{ sku: customer.ruc }] : []),
+            { name: customer.name.replace("Cliente E2E", "Producto E2E") },
+          ],
+        },
         select: { id: true },
       })
     ).map((p) => p.id);
@@ -48,6 +54,10 @@ export async function cleanupCustomer(name: string) {
     });
     await tx.receipt.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await tx.payment.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+    await tx.appointment.deleteMany({
+      where: { invoiceId: { in: invoiceIds } },
+    });
+    await tx.customerAdvance.deleteMany({ where: { customerId: customer.id } });
     await tx.invoiceItem.deleteMany({
       where: { invoiceId: { in: invoiceIds } },
     });

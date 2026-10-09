@@ -64,8 +64,6 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
           <p className="text-sm font-semibold">
             {customer.legalName || customer.name}
           </p>
-          <p className="text-xs text-slate-500 mt-2">{customer.ruc}</p>
-          <p className="text-xs text-slate-500 mt-1">{customer.address}</p>
           <p className="text-xs text-slate-500 mt-1">
             {[customer.email, customer.phone].filter(Boolean).join(" · ")}
           </p>

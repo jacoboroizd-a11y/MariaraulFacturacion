@@ -21,27 +21,44 @@ import {
   ChevronDown,
   Plus,
   ShieldCheck,
+  Home,
+  MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import type { Context } from "@/server/auth";
 const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/", label: "Inicio", icon: Home },
   { href: "/sales", label: "Nueva factura", icon: Sparkles },
-  { href: "/invoices", label: "Ventas y abonos", icon: ReceiptText },
+  { href: "/advances", label: "Adelantos", icon: CreditCard },
+  { href: "/invoices", label: "Facturas", icon: ReceiptText },
+  { href: "/daily-close", label: "Apertura y cierre", icon: CreditCard },
+  { href: "/messaging", label: "Mensajería", icon: MessagesSquare },
   { href: "/appointments", label: "Citas", icon: CalendarDays },
-  { href: "/daily-close", label: "Cierre de caja", icon: CreditCard },
-  { href: "/sessions", label: "Sesiones y seguimiento", icon: CalendarDays },
   { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/products", label: "Catálogo e inventario", icon: Package },
+  { href: "/products", label: "Inventario y tratamientos", icon: Package },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 const moreNav = [
-  { href: "/quotes", label: "Cotizaciones", icon: FileText },
-  { href: "/payments", label: "Pagos", icon: CreditCard },
-  { href: "/receipts", label: "Recibos", icon: ReceiptText },
-  { href: "/reports", label: "Reportes", icon: BarChart3 },
+  { href: "/quotes", label: "Cotizaciones de productos", icon: FileText },
+  { href: "/accounting", label: "Reportes", icon: BarChart3 },
   { href: "/settings", label: "Administración", icon: Settings },
 ];
+function allowed(role: string, href: string) {
+  if (role === "ACCOUNTANT") return ["/", "/accounting"].includes(href);
+  if (role === "ADMIN") return true;
+  if (role === "VIEWER")
+    return ["/", "/customers", "/invoices", "/appointments"].includes(href);
+  return [
+    "/",
+    "/sales",
+    "/advances",
+    "/invoices",
+    "/daily-close",
+    "/messaging",
+    "/appointments",
+  ].includes(href);
+}
 export function Shell({
   ctx,
   children,
@@ -59,7 +76,7 @@ export function Shell({
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      if (q.length < 2) {
+      if (ctx.role === "ACCOUNTANT" || q.length < 2) {
         setResults([]);
         return;
       }
@@ -74,7 +91,7 @@ export function Shell({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [q]);
+  }, [q, ctx.role]);
   return (
     <div className="min-h-screen">
       <aside
@@ -84,14 +101,20 @@ export function Shell({
         )}
       >
         <div className="h-20 flex items-center px-7 text-2xl font-bold tracking-tight text-[#163d33]">
-          <Image
-            src="/brand/mariaraul.png"
-            alt="Dra. Mariaraúl · Medicina estética"
-            width={2833}
-            height={682}
-            className="w-[184px] h-auto"
-            priority
-          />
+          <Link
+            href="/"
+            onClick={() => setOpen(false)}
+            aria-label="Ir al inicio"
+          >
+            <Image
+              src="/brand/mariaraul.png"
+              alt="Dra. Mariaraúl · Medicina estética"
+              width={2833}
+              height={682}
+              className="w-[184px] h-auto"
+              priority
+            />
+          </Link>
           <button
             onClick={() => setOpen(false)}
             aria-label="Cerrar menú"
@@ -114,12 +137,7 @@ export function Shell({
         </div>
         <nav className="px-3 space-y-1 overflow-y-auto min-h-0">
           {nav
-            .filter(
-              (n) =>
-                (!["/sales", "/daily-close"].includes(n.href) ||
-                  ctx.role !== "VIEWER") &&
-                (n.href !== "/dashboard" || ctx.role === "ADMIN"),
-            )
+            .filter((n) => allowed(ctx.role, n.href))
             .map((n) => (
               <div key={n.href}>
                 {(n.href != "/settings" || ctx.role === "ADMIN") && (
@@ -128,7 +146,11 @@ export function Shell({
                     href={n.href}
                     className={cn(
                       "flex gap-3 items-center px-3 py-3 rounded-xl text-[13px]",
-                      pathname.startsWith(n.href)
+                      (
+                        n.href === "/"
+                          ? pathname === "/"
+                          : pathname.startsWith(n.href)
+                      )
                         ? "bg-emerald-100/70 text-emerald-900 font-semibold shadow-sm"
                         : "text-slate-500 hover:bg-slate-50",
                     )}
@@ -141,17 +163,15 @@ export function Shell({
             ))}
           <details
             className="pt-4"
-            open={moreNav.some((n) => pathname.startsWith(n.href))}
+            open={moreNav.some((n) =>
+              n.href === "/" ? pathname === "/" : pathname.startsWith(n.href),
+            )}
           >
             <summary className="cursor-pointer px-3 py-2 text-xs text-slate-500">
               Más opciones
             </summary>
             {moreNav
-              .filter(
-                (n) =>
-                  !["/settings", "/reports"].includes(n.href) ||
-                  ctx.role === "ADMIN",
-              )
+              .filter((n) => allowed(ctx.role, n.href))
               .map((n) => (
                 <Link
                   key={n.href}
@@ -159,7 +179,11 @@ export function Shell({
                   onClick={() => setOpen(false)}
                   className={cn(
                     "flex gap-3 items-center px-3 py-3 rounded-xl text-[13px]",
-                    pathname.startsWith(n.href)
+                    (
+                      n.href === "/"
+                        ? pathname === "/"
+                        : pathname.startsWith(n.href)
+                    )
                       ? "bg-emerald-100/70 text-emerald-900 font-semibold shadow-sm"
                       : "text-slate-500 hover:bg-slate-50",
                   )}
@@ -212,6 +236,7 @@ export function Shell({
             <div className="flex items-center gap-2 text-slate-400">
               <Search size={17} />
               <input
+                disabled={ctx.role === "ACCOUNTANT"}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Buscar clientes, documentos, productos…"
@@ -242,7 +267,7 @@ export function Shell({
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {ctx.role !== "VIEWER" && (
+            {["ADMIN", "BILLING"].includes(ctx.role) && (
               <Button size="sm" asChild>
                 <Link href="/sales">
                   <Plus size={14} />

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "./ui/input";
@@ -8,13 +9,27 @@ import type { CloseData } from "@/server/cash-close";
 export function CashCloseForm({
   day,
   received,
+  opening,
+  expenses,
 }: {
   day: string;
   received: { NIO: string; USD: string };
+  opening: { NIO: string; USD: string };
+  expenses: { NIO: string; USD: string };
 }) {
   const router = useRouter();
-  const [NIO, setNIO] = useState({ opening: "0", out: "0", counted: "" });
-  const [USD, setUSD] = useState({ opening: "0", out: "0", counted: "0" });
+  const [NIO, setNIO] = useState({
+    opening: opening.NIO,
+    out: expenses.NIO,
+    counted: "",
+    remaining: "",
+  });
+  const [USD, setUSD] = useState({
+    opening: opening.USD,
+    out: expenses.USD,
+    counted: "0",
+    remaining: "0",
+  });
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -62,6 +77,12 @@ export function CashCloseForm({
       }}
     >
       <h3 className="font-semibold">Contar efectivo y entregar cierre</h3>
+      <Link
+        className="block text-sm text-emerald-800 underline"
+        href="/daily-close?tab=expenses"
+      >
+        Registrar o revisar salidas de efectivo
+      </Link>
       <p className="text-sm text-slate-500">
         Cuenta los billetes y monedas. Administración revisará el cierre; no
         modifica facturas ni pagos.
@@ -99,6 +120,10 @@ export function CashCloseForm({
                     { key: "opening", label: "Fondo inicial" },
                     { key: "out", label: "Salidas de efectivo" },
                     { key: "counted", label: "Efectivo contado" },
+                    {
+                      key: "remaining",
+                      label: "Efectivo que queda para mañana",
+                    },
                   ] as const
                 ).map((field) => (
                   <label
@@ -109,6 +134,8 @@ export function CashCloseForm({
                     <Input
                       aria-label={`${field.label} ${currency}`}
                       type="number"
+                      inputMode="decimal"
+                      readOnly={["opening", "out"].includes(field.key)}
                       min="0"
                       step="0.01"
                       required
@@ -217,7 +244,7 @@ export function CashCloseReview({ id }: { id: string }) {
           disabled={busy}
           onClick={() => review("REJECTED")}
         >
-          Solicitar corrección
+          Marcar discrepancia
         </Button>
       </div>
       {error && (

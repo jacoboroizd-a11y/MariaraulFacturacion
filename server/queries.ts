@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { type Context, AppError, authorize } from "./auth";
+import { type Context, AppError, authorizeReports } from "./auth";
 import { invoiceStatus, decimal, convertCurrency, amount } from "@/lib/money";
 import { todayString } from "@/lib/utils";
 export const serialize = <T>(value: T) => JSON.parse(JSON.stringify(value));
@@ -24,6 +24,13 @@ export async function refreshStatuses(companyId: string) {
   });
 }
 export async function list(ctx: Context, kind: string) {
+  if (ctx.role === "ACCOUNTANT")
+    throw new AppError("Este perfil solo puede consultar reportes.", 403);
+  if (
+    ctx.role !== "ADMIN" &&
+    ["products", "taxes", "quotes", "audit", "users"].includes(kind)
+  )
+    throw new AppError("Acceso administrativo.", 403);
   await refreshStatuses(ctx.companyId);
   const where = { companyId: ctx.companyId };
   switch (kind) {
@@ -93,6 +100,11 @@ export async function list(ctx: Context, kind: string) {
   }
 }
 export async function detail(ctx: Context, kind: string, id: string) {
+  if (
+    ctx.role === "ACCOUNTANT" ||
+    (ctx.role !== "ADMIN" && ["products", "taxes", "quotes"].includes(kind))
+  )
+    throw new AppError("Acceso restringido.", 403);
   await refreshStatuses(ctx.companyId);
   const where = { id, companyId: ctx.companyId };
   let data;
@@ -147,9 +159,16 @@ export async function detail(ctx: Context, kind: string, id: string) {
   return data;
 }
 export async function options(ctx: Context) {
+  if (ctx.role === "ACCOUNTANT") throw new AppError("Acceso restringido.", 403);
   const [customers, products, taxes, company] = await Promise.all([
     db.customer.findMany({
       where: { companyId: ctx.companyId, active: true },
+      include: {
+        advances: {
+          where: { appliedInvoiceId: null },
+          orderBy: { createdAt: "asc" },
+        },
+      },
       orderBy: { name: "asc" },
     }),
     db.product.findMany({
@@ -166,6 +185,7 @@ export async function options(ctx: Context) {
   return serialize({ customers, products, taxes, company });
 }
 export async function search(ctx: Context, q: string) {
+  if (ctx.role === "ACCOUNTANT") throw new AppError("Acceso restringido.", 403);
   if (q.length < 2) return [];
   const base = { companyId: ctx.companyId };
   const contains = { contains: q.slice(0, 100), mode: "insensitive" as const };
@@ -220,7 +240,7 @@ export async function search(ctx: Context, q: string) {
   ];
 }
 export async function analytics(ctx: Context, start?: string, end?: string) {
-  authorize(ctx, true);
+  authorizeReports(ctx);
   await refreshStatuses(ctx.companyId);
   const today = todayString();
   const now = new Date(today + "T00:00:00Z");
@@ -232,14 +252,14 @@ export async function analytics(ctx: Context, start?: string, end?: string) {
     : new Date(now.getTime() + 86400000 - 1);
   if (isNaN(from.getTime()) || isNaN(to.getTime()) || from > to)
     throw new AppError("Rango de fechas inválido.");
-  const [invoices, payments, customers, company] = await Promise.all([
+  const [invoices, payments, customers, company, advances] = await Promise.all([
     db.invoice.findMany({
       where: { companyId: ctx.companyId, status: { notIn: ["VOID", "DRAFT"] } },
       include: { customer: true, items: true },
       orderBy: { date: "desc" },
     }),
     db.payment.findMany({
-      where: { companyId: ctx.companyId, deletedAt: null },
+      where: { companyId: ctx.companyId, deletedAt: null, advanceId: null },
       include: { invoice: { include: { customer: true, items: true } } },
     }),
     db.customer.count({ where: { companyId: ctx.companyId, active: true } }),
@@ -247,6 +267,7 @@ export async function analytics(ctx: Context, start?: string, end?: string) {
       where: { id: ctx.companyId },
       include: { settings: true },
     }),
+    db.customerAdvance.findMany({ where: { companyId: ctx.companyId } }),
   ]);
   const currency = company.settings!.primaryCurrency;
   const nio = (v: string, c: string, r: string) =>
@@ -279,6 +300,20 @@ export async function analytics(ctx: Context, start?: string, end?: string) {
         decimal(0),
       ),
     );
+  const sumAdvances = (start: Date, end: Date) =>
+    advances
+      .filter((a) => a.paymentDate >= start && a.paymentDate <= end)
+      .reduce(
+        (sum, a) =>
+          sum.plus(
+            nio(
+              a.amount.toString(),
+              a.currency,
+              company.settings!.exchangeRate.toString(),
+            ),
+          ),
+        decimal(0),
+      );
   const topCustomers = new Map<
     string,
     { name: string; total: ReturnType<typeof decimal> }
@@ -350,7 +385,9 @@ export async function analytics(ctx: Context, start?: string, end?: string) {
     start: from.toISOString().slice(0, 10),
     end: to.toISOString().slice(0, 10),
     sales: sumInvoices(selected, "total"),
-    collected: sumPayments(received),
+    collected: amount(
+      decimal(sumPayments(received)).plus(sumAdvances(from, to)),
+    ),
     receivable: sumInvoices(
       invoices.filter((i) => i.balanceDue.gt(0)),
       "balanceDue",
@@ -360,11 +397,18 @@ export async function analytics(ctx: Context, start?: string, end?: string) {
     overdueCount: invoices.filter((i) => i.status === "OVERDUE").length,
     days: [7, 30, 90].map((days) => ({
       days,
-      total: sumPayments(
-        payments.filter(
-          (p) =>
-            p.paymentDate >= new Date(now.getTime() - (days - 1) * 86400000) &&
-            p.paymentDate <= to,
+      total: amount(
+        decimal(
+          sumPayments(
+            payments.filter(
+              (p) =>
+                p.paymentDate >=
+                  new Date(now.getTime() - (days - 1) * 86400000) &&
+                p.paymentDate <= to,
+            ),
+          ),
+        ).plus(
+          sumAdvances(new Date(now.getTime() - (days - 1) * 86400000), to),
         ),
       ),
     })),

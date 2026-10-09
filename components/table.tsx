@@ -260,9 +260,7 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
               </th>
               {kind === "customers" ? (
                 <>
-                  <th>RUC / Cédula</th>
                   <th>Contacto</th>
-                  <th>Ciudad</th>
                 </>
               ) : kind === "products" ? (
                 <>
@@ -328,12 +326,10 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
                   </td>
                   {kind === "customers" ? (
                     <>
-                      <td>{r.ruc || "—"}</td>
                       <td>
                         <p>{r.email || "—"}</p>
                         <p className="text-slate-400 text-xs mt-1">{r.phone}</p>
                       </td>
-                      <td>{r.city || "—"}</td>
                     </>
                   ) : kind === "products" ? (
                     <>

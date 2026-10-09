@@ -1,6 +1,13 @@
+import { prepareCash, removeCash } from "./cash-fixture";
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { db } from "../../server/db";
+test.beforeEach(async () => {
+  await prepareCash();
+});
+test.afterEach(async () => {
+  await removeCash();
+});
 test("usuario corto y PIN: facturación sin reportes", async ({ page }) => {
   await page.setViewportSize({ width: 820, height: 1180 });
   const username = "recepcion-" + randomUUID().slice(0, 8);
@@ -13,7 +20,8 @@ test("usuario corto y PIN: facturación sin reportes", async ({ page }) => {
       .getByLabel("PIN o contraseña")
       .fill(process.env.SEED_ADMIN_PASSWORD!);
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
-    await expect(page).toHaveURL(/dashboard/);
+    await expect(page).toHaveURL(new RegExp("/$"));
+    await page.goto("/dashboard");
     const response = await page.request.post("/api/data/users", {
       headers: { Origin: new URL(page.url()).origin },
       data: { name: username, username, password: "824196", role: "BILLING" },
@@ -28,7 +36,7 @@ test("usuario corto y PIN: facturación sin reportes", async ({ page }) => {
     await page.getByLabel("Usuario o correo").fill(username);
     await page.getByLabel("PIN o contraseña").fill("824196");
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
-    await expect(page).toHaveURL(/sales/);
+    await expect(page).toHaveURL(new RegExp("/$"));
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -46,6 +54,7 @@ test("usuario corto y PIN: facturación sin reportes", async ({ page }) => {
     expect((await page.request.get("/api/data/analytics")).status()).toBe(403);
     await page.goto("/daily-close");
     await page.getByLabel("Efectivo contado NIO").fill("0");
+    await page.getByLabel("Efectivo que queda para mañana NIO").fill("0");
     const closeResponse = page.waitForResponse(
       (r) =>
         r.request().method() === "POST" && r.url().endsWith("/api/cash-close"),
@@ -57,7 +66,7 @@ test("usuario corto y PIN: facturación sin reportes", async ({ page }) => {
     expect(close.status()).toBe(200);
     closeId = (await close.json()).id;
     await expect(
-      page.getByRole("status").filter({ hasText: "Cierre entregado" }),
+      page.getByRole("heading", { name: "Caja cerrada" }),
     ).toBeVisible();
     const forbidden = await page.request.post("/api/cash-close", {
       headers: { Origin: new URL(page.url()).origin },
@@ -65,7 +74,7 @@ test("usuario corto y PIN: facturación sin reportes", async ({ page }) => {
     });
     expect(forbidden.status()).toBe(403);
     await page.goto("/reports");
-    await expect(page).toHaveURL(/sales/);
+    await expect(page).toHaveURL(new RegExp("/$"));
   } finally {
     if (closeId)
       await db.auditLog.deleteMany({

@@ -1,4 +1,5 @@
 "use client";
+import { PhoneField } from "./phone-field";
 import { FilePicker } from "./ui/file-picker";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useState, useId } from "react";
@@ -116,19 +117,16 @@ export function EntityForm({
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
     formState: { isSubmitting },
   } = useForm<Record<string, string | boolean | number>>({
     defaultValues: defaults,
   });
+  const phoneValue = useWatch({ control, name: "phone" });
   const customerFields: Field[] = [
     { key: "name", label: "Nombre del cliente", required: true },
-    { key: "ruc", label: "RUC / Cédula" },
-    { key: "legalName", label: "Razón social" },
-    { key: "tradeName", label: "Nombre comercial" },
     { key: "email", label: "Correo electrónico", type: "email" },
-    { key: "phone", label: "Teléfono" },
-    { key: "address", label: "Dirección" },
-    { key: "city", label: "Ciudad" },
     { key: "notes", label: "Notas", type: "textarea", full: true },
     { key: "active", label: "Cliente activo", type: "checkbox" },
   ];
@@ -139,7 +137,7 @@ export function EntityForm({
       key: "type",
       label: "Tipo",
       options: [
-        { value: "PRODUCT", label: "Cosmético" },
+        { value: "PRODUCT", label: "Producto de cuidado personal" },
         { value: "SERVICE", label: "Tratamiento / paquete" },
       ],
     },
@@ -149,7 +147,7 @@ export function EntityForm({
     },
     {
       key: "stock",
-      label: "Existencias iniciales / actuales (solo cosméticos)",
+      label: "Existencias iniciales / actuales (solo productos)",
       type: "number",
     },
     {
@@ -164,7 +162,7 @@ export function EntityForm({
       options: [
         {
           value: "FIXED",
-          label: "Precio fijo (tratamiento, paquete o cosmético)",
+          label: "Precio fijo (tratamiento, paquete o producto)",
         },
         { value: "PER_UNIT", label: "Precio por unidad aplicada (ej. Botox)" },
       ],
@@ -229,6 +227,7 @@ export function EntityForm({
                   { value: "ADMIN", label: "Administrador" },
                   { value: "BILLING", label: "Facturación" },
                   { value: "VIEWER", label: "Solo lectura" },
+                  { value: "ACCOUNTANT", label: "Contadora · solo reportes" },
                 ],
               },
             ] as Field[]);
@@ -255,17 +254,30 @@ export function EntityForm({
         }
       })}
     >
-      <div className="grid md:grid-cols-2 gap-5">
-        <Fields fields={fields} register={register} />
-      </div>
-      <div className="flex justify-end gap-3 mt-7 pt-5 border-t border-slate-100">
-        <Button variant="outline" type="button" onClick={() => router.back()}>
-          Cancelar
-        </Button>
-        <Button disabled={isSubmitting || !hydrated}>
-          {isSubmitting ? "Guardando…" : "Guardar"}
-        </Button>
-      </div>
+      <fieldset disabled={!hydrated || isSubmitting}>
+        <div className="grid md:grid-cols-2 gap-5">
+          <Fields fields={fields} register={register} />
+          {kind === "customers" && (
+            <label className="block text-xs font-medium text-slate-600">
+              <span className="block mb-2">Teléfono</span>
+              <PhoneField
+                value={String(phoneValue || "")}
+                onChange={(value) =>
+                  setValue("phone", value, { shouldDirty: true })
+                }
+              />
+            </label>
+          )}
+        </div>
+        <div className="flex justify-end gap-3 mt-7 pt-5 border-t border-slate-100">
+          <Button variant="outline" type="button" onClick={() => router.back()}>
+            Cancelar
+          </Button>
+          <Button disabled={isSubmitting || !hydrated}>
+            {isSubmitting ? "Guardando…" : "Guardar"}
+          </Button>
+        </div>
+      </fieldset>
     </form>
   );
 }
@@ -306,6 +318,11 @@ export function SettingsForm({ company }: { company: CompanyView }) {
         { value: "NIO", label: "NIO" },
         { value: "USD", label: "USD" },
       ],
+    },
+    {
+      key: "holidays",
+      label: "Días adicionales sin atención (YYYY-MM-DD, separados por comas)",
+      full: true,
     },
     { key: "exchangeRate", label: "Tipo de cambio (NIO por USD)" },
     {
@@ -475,6 +492,7 @@ export function MemberControls({ row }: { row: Row }) {
         <option value="ADMIN">Administrador</option>
         <option value="BILLING">Facturación</option>
         <option value="VIEWER">Consulta</option>
+        <option value="ACCOUNTANT">Contadora</option>
       </select>
       <Button
         variant="outline"

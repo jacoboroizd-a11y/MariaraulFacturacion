@@ -1,3 +1,4 @@
+import { prepareCash, removeCash } from "./cash-fixture";
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { cleanupCustomer } from "./cleanup";
@@ -5,6 +6,12 @@ let createdCustomerName = "";
 test.afterEach(async () => {
   if (createdCustomerName) await cleanupCustomer(createdCustomerName);
   createdCustomerName = "";
+});
+test.beforeEach(async () => {
+  await prepareCash();
+});
+test.afterEach(async () => {
+  await removeCash();
 });
 test("flujo completo de facturación desde el navegador", async ({ page }) => {
   const suffix = randomUUID().slice(0, 8);
@@ -18,13 +25,13 @@ test("flujo completo de facturación desde el navegador", async ({ page }) => {
   await page.getByLabel("Usuario o correo").fill("admin@ejemplo.invalid");
   await page.getByLabel("PIN o contraseña").fill(password);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  await expect(page).toHaveURL(/dashboard/);
+  await expect(page).toHaveURL(new RegExp("/$"));
+  await page.goto("/dashboard");
   await expect(
     page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await page.goto("/customers/new");
   await page.getByLabel("Nombre del cliente").fill(customerName);
-  await page.getByLabel("RUC / Cédula").fill("E2E-" + suffix);
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: customerName, exact: true }),
@@ -34,7 +41,7 @@ test("flujo completo de facturación desde el navegador", async ({ page }) => {
   await page.getByLabel("Código / SKU").fill("E2E-" + suffix);
   await page.getByLabel("Tipo", { exact: true }).selectOption("PRODUCT");
   await page
-    .getByLabel("Existencias iniciales / actuales (solo cosméticos)")
+    .getByLabel("Existencias iniciales / actuales (solo productos)")
     .fill("10");
   await page.getByLabel("Precio *", { exact: true }).fill("100.00");
   await page
@@ -48,7 +55,7 @@ test("flujo completo de facturación desde el navegador", async ({ page }) => {
   await page.getByLabel("Buscar cliente").fill(customerName);
   await page
     .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: customerName + " · E2E-" + suffix });
+    .selectOption({ label: customerName });
   await page.getByLabel("Agregar producto o servicio").fill(productName);
   await page.getByRole("button").filter({ hasText: productName }).click();
   await expect(page.getByLabel("unitPrice línea 1")).toHaveValue("100.00");
@@ -119,7 +126,7 @@ test("flujo completo de facturación desde el navegador", async ({ page }) => {
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "Abrir menú" }).click();
   await expect(
-    page.getByRole("link", { name: "Catálogo e inventario" }),
+    page.getByRole("link", { name: "Inventario y tratamientos" }),
   ).toBeVisible();
 });
 test("protección de rutas, origen y credenciales", async ({ page }) => {

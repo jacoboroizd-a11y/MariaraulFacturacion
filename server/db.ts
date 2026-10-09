@@ -4,6 +4,7 @@ export const db = globalDb.prisma ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalDb.prisma = db;
 export async function transaction<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  retryUnique = false,
 ): Promise<T> {
   for (let attempt = 0; attempt < 10; attempt++) {
     try {
@@ -15,7 +16,10 @@ export async function transaction<T>(
       if (
         !(
           e instanceof Prisma.PrismaClientKnownRequestError &&
-          e.code === "P2034"
+          (e.code === "P2034" ||
+            (retryUnique && e.code === "P2002") ||
+            (e.code === "P2010" &&
+              ["40001", "40P01"].includes(String(e.meta?.code))))
         ) ||
         attempt === 9
       )

@@ -200,3 +200,35 @@ for (const template of templates) {
   }
   await book.xlsx.writeFile(`public/${template.file}.xlsx`);
 }
+
+const clients = new ExcelJS.Workbook();
+const customers = clients.addWorksheet("Clientes");
+customers.addRow([
+  "Nombre y Apellido",
+  "Numero de Telefono",
+  "Correo Electrónico",
+]);
+customers.columns.forEach((c) => {
+  c.width = 30;
+  c.numFmt = "@";
+});
+customers.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+customers.getRow(1).fill = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FF047857" },
+};
+const instructions = clients.addWorksheet("Instrucciones");
+instructions.addRows([
+  ["Completa únicamente la hoja Clientes."],
+  ["El nombre es obligatorio. Teléfono y correo son opcionales."],
+  [
+    "Escribe el teléfono como texto: +50588887777. Sin prefijo se interpreta como Nicaragua.",
+  ],
+  [
+    "Los teléfonos o correos existentes se detectan en la vista previa; no se sobrescriben.",
+  ],
+  ["No uses fórmulas. Máximo 500 clientes por archivo."],
+]);
+instructions.getColumn(1).width = 110;
+await clients.xlsx.writeFile("public/plantilla-clientes.xlsx");

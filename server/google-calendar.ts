@@ -32,12 +32,12 @@ export function validateGoogleCalendarUrl(value: string) {
     url.password ||
     url.search ||
     url.hash ||
-    !/^\/calendar\/ical\/[^/]+\/private-[a-zA-Z0-9]+\/basic\.ics$/.test(
+    !/^\/calendar\/ical\/[^/]+\/(?:private-[a-zA-Z0-9]+|public)\/basic\.ics$/.test(
       url.pathname,
     )
   )
     throw new AppError(
-      "Usa la dirección secreta en formato iCal de Google Calendar (https://calendar.google.com/calendar/ical/…).",
+      "Usa la dirección pública o secreta en formato iCal de Google Calendar (https://calendar.google.com/calendar/ical/…).",
     );
   return url.toString();
 }
@@ -162,12 +162,49 @@ async function fetchCalendar(url: string) {
 }
 export async function saveGoogleCalendar(
   ctx: Context,
-  input: { url?: unknown },
+  input: { url?: unknown; ics?: unknown; calendarId?: unknown },
 ) {
   authorize(ctx, true);
-  if (typeof input.url !== "string" || input.url.length > 2000)
+  if (
+    typeof input.ics !== "string" &&
+    typeof input.calendarId !== "string" &&
+    (typeof input.url !== "string" || input.url.length > 2000)
+  )
     throw new AppError("Selecciona un enlace de Google Calendar.");
-  const url = input.url.trim();
+  if (
+    typeof input.calendarId === "string" &&
+    input.calendarId.length > 0 &&
+    input.calendarId.length < 500
+  ) {
+    await db.calendarConnection.update({
+      where: { companyId: ctx.companyId },
+      data: { calendarId: input.calendarId.trim() },
+    });
+    return { connected: true };
+  }
+  if (typeof input.ics === "string") {
+    if (Buffer.byteLength(input.ics) > 2 * 1024 * 1024)
+      throw new AppError("El archivo supera los 2 MB.");
+    parseGoogleCalendar(
+      input.ics,
+      new Date()
+        .toLocaleDateString("en-CA", { timeZone: "America/Managua" })
+        .slice(0, 7),
+    );
+    await db.calendarConnection.upsert({
+      where: { companyId: ctx.companyId },
+      create: {
+        companyId: ctx.companyId,
+        encryptedUrl: encryptCalendarUrl("icsfile:" + input.ics),
+      },
+      update: {
+        encryptedUrl: encryptCalendarUrl("icsfile:" + input.ics),
+        encryptedTokens: "",
+      },
+    });
+    return { connected: true };
+  }
+  const url = typeof input.url === "string" ? input.url.trim() : "";
   if (url) {
     try {
       parseGoogleCalendar(
@@ -192,7 +229,7 @@ export async function saveGoogleCalendar(
           companyId: ctx.companyId,
           encryptedUrl: encryptCalendarUrl(url),
         },
-        update: { encryptedUrl: encryptCalendarUrl(url) },
+        update: { encryptedUrl: encryptCalendarUrl(url), encryptedTokens: "" },
       });
     else
       await tx.calendarConnection.deleteMany({
@@ -215,10 +252,56 @@ export async function googleCalendarEvents(ctx: Context, month: string) {
   if (!connection)
     return { connected: false, events: [] as CalendarEvent[], error: "" };
   try {
+    if (connection.encryptedTokens) {
+      const { calendarToken } = await import("./calendar-sync");
+      const credential = await calendarToken(ctx.companyId);
+      if (!credential) throw new Error("Calendar missing");
+      const range = monthRange(month),
+        url = new URL(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(credential.calendarId)}/events`,
+        );
+      url.search = new URLSearchParams({
+        timeMin: range.from.toISOString(),
+        timeMax: range.to.toISOString(),
+        singleEvents: "true",
+        maxResults: "2500",
+      }).toString();
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${credential.token}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error("Calendar unavailable");
+      const data = await response.json();
+      if (data.nextPageToken) throw new Error("Calendar too large");
+      return {
+        connected: true,
+        events: (data.items || [])
+          .filter((e: { status: string }) => e.status !== "cancelled")
+          .map(
+            (e: {
+              id: string;
+              summary?: string;
+              start: { dateTime?: string; date?: string };
+              end: { dateTime?: string; date?: string };
+            }) => ({
+              id: e.id,
+              title: e.summary || "Cita",
+              start: e.start.dateTime || e.start.date + "T00:00:00-06:00",
+              end: e.end.dateTime || e.end.date + "T00:00:00-06:00",
+              allDay: !e.start.dateTime,
+            }),
+          ),
+        error: "",
+      };
+    }
+    const source = decryptCalendarUrl(connection.encryptedUrl);
     return {
       connected: true,
       events: parseGoogleCalendar(
-        await fetchCalendar(decryptCalendarUrl(connection.encryptedUrl)),
+        source.startsWith("icsfile:")
+          ? source.slice(8)
+          : await fetchCalendar(source),
         month,
       ),
       error: "",

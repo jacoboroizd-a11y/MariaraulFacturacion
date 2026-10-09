@@ -29,7 +29,7 @@ export async function POST(
     const result = await login(data.email, data.password);
     return isJson
       ? NextResponse.json(result)
-      : NextResponse.redirect(new URL("/dashboard", request.url), 303);
+      : NextResponse.redirect(new URL("/", request.url), 303);
   } catch (e) {
     return NextResponse.json(
       {

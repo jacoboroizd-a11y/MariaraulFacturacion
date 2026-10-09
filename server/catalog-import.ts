@@ -160,7 +160,7 @@ export async function parseCatalogFile(file: File, mode: ImportMode = "MIXED") {
   return catalogFromCells(cells, mode);
 }
 export async function importCatalog(ctx: Context, input: unknown) {
-  authorize(ctx);
+  authorize(ctx, true);
   const { requestId, rows } = z
     .object({
       requestId: z.uuid(),

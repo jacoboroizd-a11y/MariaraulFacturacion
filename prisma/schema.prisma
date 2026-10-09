@@ -11,6 +11,7 @@ enum Role {
   ADMIN
   BILLING
   VIEWER
+  ACCOUNTANT
 }
 
 enum Currency {
@@ -81,6 +82,13 @@ model LoginAttempt {
 }
 
 model Company {
+  cashMovements CashMovement[]
+  messagingConnection MessagingConnection?
+  messageThreads MessageThread[]
+  cashDays CashDay[]
+  advances CustomerAdvance[]
+  appointments Appointment[]
+  deliveryJobs ReportDelivery[]
   calendarConnection CalendarConnection?
   id          String           @id @default(cuid())
   name        String
@@ -131,6 +139,7 @@ model CompanySettings {
   terms             String   @default("")
   notes             String   @default("")
   dateFormat        String   @default("dd/MM/yyyy")
+  holidays          String   @default("")
 }
 
 model Customer {
@@ -148,6 +157,8 @@ model Customer {
   notes     String    @default("")
   active    Boolean   @default(true)
   quotes    Quote[]
+  advances CustomerAdvance[]
+  appointments Appointment[]
   invoices  Invoice[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -254,6 +265,7 @@ model QuoteItem {
 }
 
 model Invoice {
+  appointment Appointment?
   nextAppointment  DateTime?
   checkoutKey      String?
   checkoutHash     String?
@@ -299,6 +311,7 @@ model Invoice {
 }
 
 model InvoiceItem {
+  reportGroup String @default("ESTHETIC")
   sessionsTotal Int     @default(0)
   sessionsUsed  Int     @default(0)
   id           String   @id @default(cuid())
@@ -324,6 +337,7 @@ model InvoiceItem {
 
 model Payment {
   id          String        @id @default(cuid())
+  advanceId String? @unique
   companyId   String
   company     Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   invoiceId   String
@@ -382,6 +396,149 @@ model AuditLog {
 model CalendarConnection {
   companyId String @id
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  encryptedUrl String
+  encryptedUrl String @default("")
+  encryptedTokens String @default("")
+  calendarId String @default("primary")
   updatedAt DateTime @updatedAt
+}
+
+model CashDay {
+  movements CashMovement[]
+  @@unique([id,companyId])
+ id String @id @default(cuid())
+ companyId String
+ company Company @relation(fields:[companyId],references:[id],onDelete:Restrict)
+ day DateTime @db.Date
+ openedBy String
+ openedAt DateTime @default(now())
+ openingNIO Decimal @db.Decimal(18,2)
+ openingUSD Decimal @db.Decimal(18,2)
+ status String @default("OPEN")
+ closedAt DateTime?
+ closedBy String?
+ automatic Boolean @default(false)
+ closeData Json?
+ reviewedBy String?
+ reviewedAt DateTime?
+ reviewStatus String @default("PENDING")
+ reviewNotes String @default("")
+ @@unique([companyId,day])
+ @@index([companyId,status])
+}
+model CustomerAdvance {
+ id String @id @default(cuid())
+ companyId String
+ company Company @relation(fields:[companyId],references:[id],onDelete:Restrict)
+ customerId String
+ customer Customer @relation(fields:[customerId,companyId],references:[id,companyId],onDelete:Restrict)
+ amount Decimal @db.Decimal(18,2)
+ currency Currency
+ method PaymentMethod
+ paymentDate DateTime @db.Date
+ requestId String
+ createdAt DateTime @default(now())
+ appliedInvoiceId String?
+ appliedAt DateTime?
+ appliedAmount Decimal? @db.Decimal(18,2)
+ notes String @default("")
+ @@unique([companyId,requestId])
+ @@index([companyId,customerId])
+}
+model Appointment {
+ id String @id @default(cuid())
+ companyId String
+ company Company @relation(fields:[companyId],references:[id],onDelete:Restrict)
+ customerId String?
+ customer Customer? @relation(fields:[customerId,companyId],references:[id,companyId],onDelete:Restrict)
+ invoiceId String? @unique
+ invoice Invoice? @relation(fields:[invoiceId,companyId],references:[id,companyId],onDelete:Restrict)
+ title String
+ start DateTime
+ end DateTime
+ status String @default("ACTIVE")
+ googleEventId String?
+ syncStatus String @default("LOCAL")
+ version Int @default(1)
+ syncedVersion Int @default(0)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([invoiceId,companyId])
+ @@index([companyId,start])
+ @@unique([companyId,googleEventId])
+}
+model ReportDelivery {
+  payload Json?
+  firstAttemptAt DateTime?
+ id String @id @default(cuid())
+ companyId String
+ company Company @relation(fields:[companyId],references:[id],onDelete:Restrict)
+ kind String
+ period String
+ status String @default("PENDING")
+ attempts Int @default(0)
+ providerId String?
+ lastError String @default("")
+ lockedAt DateTime?
+ createdAt DateTime @default(now())
+ sentAt DateTime?
+ @@unique([companyId,kind,period])
+ @@index([status,createdAt])
+}
+
+model MessagingConnection {
+ id String @id @default(cuid())
+ companyId String @unique
+ company Company @relation(fields:[companyId],references:[id],onDelete:Restrict)
+ encryptedToken String
+ whatsappPhoneId String? @unique
+ whatsappBusinessId String?
+ instagramId String? @unique
+ facebookPageId String?
+ encryptedVerifyToken String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model MessageThread {
+ id String @id @default(cuid())
+ companyId String
+ company Company @relation(fields:[companyId],references:[id],onDelete:Restrict)
+ channel String
+ contactId String
+ name String @default("")
+ lastIncomingAt DateTime?
+ messages ClinicMessage[]
+ updatedAt DateTime @updatedAt
+ @@unique([companyId,channel,contactId])
+ @@index([companyId,updatedAt])
+}
+model ClinicMessage {
+ id String @id @default(cuid())
+ companyId String
+ threadId String
+ thread MessageThread @relation(fields:[threadId],references:[id],onDelete:Restrict)
+ providerId String? @unique
+ requestId String? @unique
+ direction String
+ text String
+ status String @default("RECEIVED")
+ createdAt DateTime @default(now())
+ @@index([companyId,threadId,createdAt])
+}
+
+model CashMovement {
+ id String @id @default(cuid())
+ companyId String
+ company Company @relation(fields:[companyId],references:[id],onDelete:Restrict)
+ cashDayId String
+ cashDay CashDay @relation(fields:[cashDayId,companyId],references:[id,companyId],onDelete:Restrict)
+ amount Decimal @db.Decimal(18,2)
+ currency Currency
+ reason String
+ purpose String
+ recipient String @default("")
+ createdBy String
+ requestId String
+ createdAt DateTime @default(now())
+ @@unique([companyId,requestId])
+ @@index([companyId,cashDayId])
 }

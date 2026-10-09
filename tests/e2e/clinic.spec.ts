@@ -1,9 +1,16 @@
+import { prepareCash, removeCash } from "./cash-fixture";
 import { writeFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { cleanupCustomer } from "./cleanup";
 import { db } from "../../server/db";
 const baseURL = process.env.E2E_BASE_URL || "http://localhost:3000";
+test.beforeEach(async () => {
+  await prepareCash();
+});
+test.afterEach(async () => {
+  await removeCash();
+});
 test("venta clínica: cliente automático, paquete, abono, cita e impresión", async ({
   page,
 }) => {
@@ -20,7 +27,8 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
       .getByLabel("PIN o contraseña")
       .fill(process.env.SEED_ADMIN_PASSWORD!);
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
-    await expect(page).toHaveURL(/dashboard/);
+    await expect(page).toHaveURL(new RegExp("/$"));
+    await page.goto("/dashboard");
     const created = await page.request.post("/api/data/products", {
       headers: { origin: baseURL },
       data: {

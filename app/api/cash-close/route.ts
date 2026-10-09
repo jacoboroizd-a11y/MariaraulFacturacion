@@ -1,16 +1,26 @@
+import { after } from "next/server";
+import { processClinicReports } from "@/server/report-delivery";
 import { context, checkOrigin, AppError } from "@/server/auth";
 import { submitCashClose, reviewCashClose } from "@/server/cash-close";
 import { z } from "zod";
+export const maxDuration = 300;
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const ctx = await context();
     const data = await request.json();
-    return Response.json(
-      await (data.reviewId
-        ? reviewCashClose(ctx, data)
-        : submitCashClose(ctx, data)),
-    );
+    const result = await (data.reviewId
+      ? reviewCashClose(ctx, data)
+      : submitCashClose(ctx, data));
+    if (!data.reviewId)
+      after(async () => {
+        try {
+          await processClinicReports(ctx.companyId);
+        } catch {
+          /* Saved delivery jobs retry independently. */
+        }
+      });
+    return Response.json(result);
   } catch (error) {
     return Response.json(
       {

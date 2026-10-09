@@ -34,7 +34,8 @@ const saleSchema = z
       )
       .min(1)
       .max(100),
-    paymentMode: z.enum(["FULL", "PARTIAL", "LATER"]),
+    paymentMode: z.enum(["FULL", "PARTIAL"]),
+    advanceIds: z.array(z.string().min(1)).max(20).default([]),
     amount: z
       .string()
       .regex(/^\d{1,12}(\.\d{1,2})?$/)
@@ -158,6 +159,17 @@ export async function createClinicSale(ctx: Context, input: unknown) {
       });
       for (const item of items) {
         const product = products.find((p) => p.id === item.productId)!;
+        await tx.invoiceItem.update({
+          where: { id: item.id },
+          data: {
+            reportGroup:
+              product.type === "PRODUCT"
+                ? "SKINCARE"
+                : /l[aá]ser/i.test(product.category)
+                  ? "LASER"
+                  : "ESTHETIC",
+          },
+        });
         if (product.type === "SERVICE")
           await tx.invoiceItem.update({
             where: { id: item.id },
@@ -179,16 +191,88 @@ export async function createClinicSale(ctx: Context, input: unknown) {
             : null,
         },
       });
+      if (data.nextAppointment) {
+        const start = new Date(data.nextAppointment + ":00-06:00");
+        const patient = await tx.customer.findUniqueOrThrow({
+          where: { id: customerId! },
+        });
+        await tx.appointment.create({
+          data: {
+            companyId: ctx.companyId,
+            invoiceId: invoice.id,
+            customerId: customerId!,
+            title: patient.name + " · " + lines[0].description,
+            start,
+            end: new Date(start.getTime() + 3600000),
+          },
+        });
+      }
+      let applied = decimal("0");
+      for (const advanceId of new Set(data.advanceIds)) {
+        const advance = await tx.customerAdvance.findFirst({
+          where: {
+            id: advanceId,
+            companyId: ctx.companyId,
+            customerId: customerId!,
+            appliedInvoiceId: null,
+          },
+        });
+        if (!advance)
+          throw new AppError(
+            "El adelanto ya fue aplicado o pertenece a otro cliente.",
+            409,
+          );
+        const value = convertCurrency(
+          advance.amount.toString(),
+          advance.currency,
+          invoice.currency,
+          invoice.exchangeRate.toString(),
+        );
+        if (applied.plus(value).gt(invoice.total))
+          throw new AppError(
+            "Los adelantos seleccionados superan el total. Selecciona un importe menor.",
+          );
+        const payment = await createPaymentTx(
+          tx,
+          ctx,
+          paymentSchema.parse({
+            invoiceId: invoice.id,
+            amount: value,
+            currency: invoice.currency,
+            paymentDate: doc.date,
+            method: advance.method,
+            reference:
+              "Adelanto recibido el " +
+              advance.paymentDate.toISOString().slice(0, 10),
+          }),
+        );
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { advanceId: advance.id },
+        });
+        await tx.customerAdvance.update({
+          where: { id: advance.id },
+          data: {
+            appliedInvoiceId: invoice.id,
+            appliedAt: new Date(),
+            appliedAmount: value,
+          },
+        });
+        applied = applied.plus(value);
+      }
+      const remaining = decimal(invoice.total.toString()).minus(applied);
       const amount =
-        data.paymentMode === "FULL" ? invoice.total.toFixed(2) : data.amount;
+        data.paymentMode === "FULL" ? remaining.toFixed(2) : data.amount;
       if (
         data.paymentMode === "PARTIAL" &&
-        (decimal(amount).lte(0) || decimal(amount).gte(invoice.total))
+        (decimal(amount).lte(0) ||
+          decimal(amount).gte(remaining) ||
+          !data.nextAppointment)
       )
         throw new AppError(
-          "El abono debe ser mayor que cero y menor que el total. Para cancelar usa Pago completo.",
+          "Indica un abono menor al saldo y la siguiente cita. Para cancelar usa Pago completo.",
         );
-      if (data.paymentMode !== "LATER")
+      if (decimal(amount).gt(0))
         await createPaymentTx(
           tx,
           ctx,
@@ -218,7 +302,7 @@ export async function recordSession(
   itemId: string,
   input: unknown,
 ) {
-  authorize(ctx);
+  authorize(ctx, true);
   const { requestId } = z.object({ requestId: z.uuid() }).parse(input);
   return transaction(async (tx) => {
     const item = await tx.invoiceItem.findFirst({
@@ -259,7 +343,7 @@ export async function changeAppointment(
   const { nextAppointment } = z
     .object({ nextAppointment: z.union([appointment, z.literal("")]) })
     .parse(input);
-  return transaction(async (tx) => {
+  const result = await transaction(async (tx) => {
     const invoice = await tx.invoice.findFirst({
       where: { id: invoiceId, companyId: ctx.companyId },
     });
@@ -273,12 +357,44 @@ export async function changeAppointment(
           : null,
       },
     });
+    const current = await tx.appointment.findUnique({ where: { invoiceId } });
+    if (nextAppointment) {
+      const start = new Date(nextAppointment + ":00-06:00"),
+        end = new Date(start.getTime() + 3600000);
+      await tx.appointment.upsert({
+        where: { invoiceId },
+        create: {
+          companyId: ctx.companyId,
+          invoiceId,
+          customerId: invoice.customerId,
+          title: "Próxima cita · " + invoice.documentNumber,
+          start,
+          end,
+        },
+        update: {
+          start,
+          end,
+          status: "ACTIVE",
+          version: { increment: 1 },
+          syncStatus: "PENDING",
+        },
+      });
+    } else if (current)
+      await tx.appointment.update({
+        where: { id: current.id },
+        data: {
+          status: "CANCELLED",
+          version: { increment: 1 },
+          syncStatus: "PENDING",
+        },
+      });
     await audit(tx, ctx, "Invoice", invoiceId, "APPOINTMENT_UPDATED", {
       nextAppointment,
       previous: invoice.nextAppointment?.toISOString() || "",
     });
     return updated;
   });
+  return result;
 }
 
 export async function adjustStock(
@@ -286,7 +402,7 @@ export async function adjustStock(
   productId: string,
   input: unknown,
 ) {
-  authorize(ctx);
+  authorize(ctx, true);
   const data = z
     .object({
       requestId: z.uuid(),

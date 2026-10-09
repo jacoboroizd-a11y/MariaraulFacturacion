@@ -1,12 +1,12 @@
-# Clínica y cosméticos
+# Clínica y productos de cuidado personal
 
 ## Venta rápida
 
-Después de iniciar sesión, todos abren el **Dashboard**. ADMIN y BILLING crean documentos desde **Nueva factura**. VIEWER conserva acceso de consulta al resumen y a los registros.
+Después de iniciar sesión se muestra la bienvenida con nombre y opciones por rol. ADMIN y BILLING facturan después de abrir caja; Contadora consulta y descarga reportes. El logo vuelve a Inicio.
 
 1. Toca tratamientos, paquetes o cosméticos para agregarlos. Ajusta la cantidad en el resumen.
 2. Escribe el nombre y teléfono opcional del cliente. Si existe, selecciona su coincidencia; si es nuevo, su ficha se crea automáticamente al guardar la factura, sin registro previo.
-3. Elige pago completo, abono o cobrar después. Para pagos recibidos, selecciona efectivo, tarjeta, transferencia u otro. Las notas de venta no tienen fecha de vencimiento; los abonos y saldos se mantienen registrados.
+3. Elige pago completo o pago parcial con saldo para la siguiente cita (obligatoria). No existe Cobrar después. Para pagos recibidos, selecciona efectivo, tarjeta, transferencia u otro. Las notas de venta no tienen fecha de vencimiento; los abonos y saldos se mantienen registrados.
 4. Agrega la próxima cita (hora de Nicaragua) y guarda. Desde el comprobante puedes imprimir, registrar otro abono o marcarlo como pagado sin salir de la factura.
 
 La factura, el cliente, las sesiones y el primer pago se guardan en una sola transacción. Un fallo revierte todo. Los reintentos de venta, cobro y entradas de inventario no duplican operaciones mientras se conserva la pantalla y su identificador de solicitud.
@@ -83,7 +83,7 @@ Las plantillas Excel incluyen Datos (la hoja a llenar), Instrucciones y Ejemplos
 
 ## Google Calendar
 
-Aplica docs/conectar-google-calendar-neon.sql antes de desplegar la conexión. En Configuración → Google Calendar pega la dirección secreta iCal (Google Calendar → Configuración → calendario de la clínica → Integrar el calendario). No hagas público el calendario y no compartas el enlace por chat. Se cifra con la clave de sesión; si rotas AUTH_SECRET, vuelve a conectar. Solo ADMIN puede conectar o desconectar. El calendario queda vinculado a la empresa actual y sus citas se consultan en Citas. Se actualiza al recargar; Google Calendar continúa siendo el lugar para crear, editar o cancelar esas citas. La conexión no escribe en Google ni convierte automáticamente citas en facturas.
+En Configuración → Google Calendar puedes enlazar un ICS público, privado o subir un archivo ICS para consulta. Para crear y mover citas sincronizadas, conecta la cuenta de Google mediante OAuth y selecciona el calendario de la clínica. Solo ADMIN configura la conexión; el personal puede crear y mover citas. Sigue [la guía de activación](activar-integraciones.md) para configurar Google y aplicar la actualización de Neon. Los enlaces privados se cifran y no deben compartirse; los enlaces públicos pueden compartirse según los permisos del calendario.
 
 ## Comprobantes impresos
 
@@ -93,9 +93,9 @@ Facturas, recibos y cotizaciones se exportan como PDF Carta vertical (8.5 × 11 
 
 Los logos oficiales están en `public/brand/mariaraul.png` y `app/icon.svg`. El logo completo aparece en navegación, acceso y comprobantes Carta; se conserva el logo guardado en las facturas anteriores si existe.
 
-Administración → Usuarios permite crear nombre, usuario corto, PIN de 6 a 12 dígitos y rol. No requiere correo. Los PIN se almacenan con bcrypt y el acceso conserva el bloqueo por intentos. Las cuentas antiguas siguen entrando con correo y contraseña. Los reportes generales, dashboard financiero y exportación mensual son exclusivos de ADMIN. Facturación puede entregar el cierre de caja. Administración revisa y aprueba o solicita una corrección; cada revisión conserva su autor. Facturación entra directamente a Nueva factura.
+Administración → Usuarios permite crear nombre, usuario corto, PIN de 6 a 12 dígitos y rol. No requiere correo. Los PIN se almacenan con bcrypt y el acceso conserva el bloqueo por intentos. Las cuentas antiguas siguen entrando con correo y contraseña. Reportes exclusivos de ADMIN y ACCOUNTANT. Dashboard e inventario exclusivos de ADMIN. Facturación puede entregar el cierre de caja. Administración revisa y aprueba o marca discrepancias, conservando el autor. Todos entran en la bienvenida.
 
-Reportes → Cierre diario separa efectivo, tarjeta, transferencia, cheque y otros por NIO y USD. Incluye abonos según fecha de pago y excluye pagos anulados. El arqueo recoge fondo inicial, salidas y efectivo contado. Calcula el esperado y guarda faltantes o sobrantes por moneda, con los cobros en el estado de entrega. Solo permite otro cierre del mismo día si Administración solicita una corrección.
+Apertura y cierre → Cierre diario separa efectivo, tarjeta, transferencia, cheque y otros por NIO y USD. Incluye abonos según fecha de pago y excluye pagos anulados. La apertura guarda el fondo inicial y la pestaña Salidas registra monto, moneda, motivo y destino. El cierre toma fondo/salidas automáticamente y recoge contado y efectivo para mañana. Calcula el esperado y guarda faltantes o sobrantes por moneda, con los cobros en el estado de entrega. No permite volver a abrir ni facturar en la misma jornada, aunque se marque una discrepancia.
 
 Para activar en producción el calendario y el acceso del personal, ejecutar `docs/activar-calendario-y-usuarios-neon.sql` en Neon antes de desplegar esta rama. Es idempotente, registra las migraciones con sus checksums y conserva las cuentas existentes.
 
@@ -104,3 +104,21 @@ Para activar en producción el calendario y el acceso del personal, ejecutar `do
 Abrir el sitio en Safari → Compartir → Añadir a pantalla de inicio. Usa el icono oficial y se abre sin la barra del navegador. Requiere conexión a internet; no almacena facturas ni pagos offline. La sesión dura ocho horas; cada empleado usa su propio usuario y PIN. Se comprueba el diseño a tamaño de tablet en navegador; no se ha probado en un iPad físico.
 
 En móviles, el catálogo de Nueva factura usa dos columnas compactas y ofrece un acceso directo al cobro al agregar artículos. Los campos usan letra de al menos 16 px y los botones tienen objetivos táctiles de 44 px. Se verifican anchos de 320, 375, 390 y 820 px sin desbordamiento horizontal.
+
+## Operaciones de caja
+
+Apertura desde las 08:00 en días laborales; atención lunes a viernes 08:30–18:30. A las 20:00 se bloquean cobros/salidas y el scheduler cierra cajas abiertas. Automático no inventa conteo ni efectivo para mañana: quedan pendientes. La siguiente apertura advierte “No se hizo cierre” si la jornada anterior cerró automáticamente, con contador de incidencias. Feriados nacionales de Nicaragua y fechas adicionales configurables.
+
+Esperado = apertura + cobros en efectivo (incluidos adelantos nuevos) − salidas registradas. Diferencia = contado − esperado. Efectivo para mañana es parte del contado; el resto se informa como retirado al cierre. Ventas, cobros y efectivo no son equivalentes. NIO/USD separados.
+
+## Adelantos
+
+Registrar adelanto recibe un pago antes del tratamiento. En Nueva factura, seleccionar cliente y adelantos disponibles. Tratamiento US$50 y adelanto US$10: factura US$50, aplica US$10 y cobra US$40. El reporte cuenta el adelanto al recibirlo sin contarlo otra vez al aplicarlo. Cada adelanto se aplica una vez y completo; si supera la factura, seleccionar menos. No es descuento ni se elimina como un cobro común.
+
+## Importar clientes
+
+Clientes → Importar clientes → `/plantilla-clientes.xlsx`. Encabezados: Nombre y Apellido, Numero de Telefono, Correo Electrónico. Primera hoja, máximo 500. Vista previa antes de guardar. Sin prefijo se usa el país seleccionado, Nicaragua por defecto. Omite teléfonos/correos existentes sin sobrescribir datos ni fusionar homónimos. Administración gestiona clientes/importación; la factura registra al cliente nuevo sin ficha previa.
+
+## Publicación e integraciones
+
+Guía vigente: `docs/activar-integraciones.md`. SQL nuevo: `docs/actualizar-operaciones-clinica-neon.sql`. Aplicar las cinco migraciones antes de desplegar. Integraciones requieren credenciales y autorización externas; el código no enlaza cuentas por sí solo.

@@ -1,246 +1,186 @@
-import { googleCalendarEvents } from "@/server/google-calendar";
+import { after } from "next/server";
 import Link from "next/link";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { redirect } from "next/navigation";
 import { pageContext } from "@/server/auth";
 import { db } from "@/server/db";
+import { googleCalendarEvents } from "@/server/google-calendar";
+import { syncAppointments } from "@/server/calendar-sync";
 import { monthRange } from "@/server/clinic-overview";
 import { todayString, appointmentLabel } from "@/lib/utils";
-import { AppointmentForm } from "@/components/clinic-followup";
+import { serialize } from "@/server/queries";
+import { AppointmentEditor } from "@/components/appointment-editor";
 import { Button } from "@/components/ui/button";
-
-export default async function AppointmentsPage({
+export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ month?: string; day?: string }>;
 }) {
   const ctx = await pageContext();
-  const params = await searchParams;
-  const month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(params.month || "")
-    ? params.month!
-    : todayString().slice(0, 7);
-  const range = monthRange(month);
-  const google = await googleCalendarEvents(ctx, month);
-  const appointments = await db.invoice.findMany({
-    where: {
-      companyId: ctx.companyId,
-      status: { notIn: ["VOID", "DRAFT"] },
-      nextAppointment: { gte: range.from, lt: range.to },
-    },
-    include: { customer: true, items: { orderBy: { position: "asc" } } },
-    orderBy: { nextAppointment: "asc" },
-  });
-  const selectedDay = /^\d{2}$/.test(params.day || "") ? params.day : undefined;
-  const date = new Date(month + "-01T12:00:00Z");
-  const days = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  const offset = (date.getUTCDay() + 6) % 7;
+  if (!["ADMIN", "BILLING"].includes(ctx.role)) redirect("/");
+  const params = await searchParams,
+    month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(params.month || "")
+      ? params.month!
+      : todayString().slice(0, 7),
+    range = monthRange(month);
+  after(() => syncAppointments(ctx.companyId));
+  const [appointments, google, customers] = await Promise.all([
+    db.appointment.findMany({
+      where: {
+        companyId: ctx.companyId,
+        status: "ACTIVE",
+        start: { gte: range.from, lt: range.to },
+      },
+      include: { customer: true },
+      orderBy: { start: "asc" },
+    }),
+    googleCalendarEvents(ctx, month),
+    db.customer.findMany({
+      where: { companyId: ctx.companyId, active: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  const ids = new Set(appointments.map((a) => a.googleEventId).filter(Boolean));
+  const external = google.events.filter(
+    (e: { id: string }) => !ids.has(e.id) && !ids.has(e.id.split("@")[0]),
+  );
+  const dayOf = (value: Date | string) =>
+    new Date(new Date(value).getTime() - 21600000).toISOString().slice(8, 10);
+  const selected = /^(0[1-9]|[12]\d|3[01])$/.test(params.day || "")
+    ? params.day
+    : undefined;
+  const date = new Date(month + "-01T12:00:00Z"),
+    offset = (date.getUTCDay() + 6) % 7,
+    days = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
+    ).getUTCDate();
   const shift = (delta: number) =>
     new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + delta, 1))
       .toISOString()
       .slice(0, 7);
-  const dayOf = (d: Date) =>
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Managua",
-      day: "2-digit",
-    }).format(d);
-  const eventOnDay = (event: { start: string; end: string }, day: string) => {
-    const start = new Date(`${month}-${day}T00:00:00-06:00`);
-    return (
-      new Date(event.start).getTime() < start.getTime() + 86400000 &&
-      new Date(event.end) > start
-    );
-  };
-  const external = google.events.filter(
-    (e) => !selectedDay || eventOnDay(e, selectedDay),
-  );
-  const shown = appointments.filter(
-    (a) => !selectedDay || dayOf(a.nextAppointment!) === selectedDay,
-  );
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-7">
+      <div className="flex flex-wrap justify-between gap-4 mb-6">
         <div>
-          <p className="text-xs font-semibold tracking-widest text-emerald-700 mb-2">
-            AGENDA DE LA CLÍNICA
-          </p>
           <h1 className="text-3xl font-semibold">Citas</h1>
-          <p className="text-sm text-slate-500 mt-2">
-            Pacientes, tratamientos y próximas visitas, en hora de Nicaragua.
+          <p className="text-sm text-slate-600 mt-2">
+            Agenda de la clínica · Hora de Nicaragua
           </p>
         </div>
-        {ctx.role !== "VIEWER" && (
-          <Button asChild>
-            <Link href="/sales">
-              <Plus size={16} />
-              Facturar y agendar
-            </Link>
-          </Button>
-        )}
-      </div>
-      <div className="panel p-4 mb-5 flex flex-wrap justify-between gap-3 text-sm">
-        <p>
-          {google.connected
-            ? "Google Calendar conectado · Solo lectura"
-            : "Conecta Google Calendar para ver aquí las citas de tu clínica."}
-        </p>
-        {ctx.role === "ADMIN" && (
-          <Link href="/settings" className="text-emerald-700">
-            {google.connected ? "Administrar conexión" : "Conectar calendario"}
-          </Link>
-        )}
-      </div>
-      {google.error && (
-        <p
-          role="alert"
-          className="rounded-xl bg-amber-50 p-4 mb-5 text-sm text-amber-800"
-        >
-          {google.error}
-        </p>
-      )}
-      <div className="grid xl:grid-cols-[320px_1fr] gap-6 items-start">
-        <section className="panel p-5">
-          <div className="flex justify-between items-center mb-5">
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
             <Link
               href={`/appointments?month=${shift(-1)}`}
               aria-label="Mes anterior"
-              className="p-2 rounded-lg hover:bg-emerald-50"
             >
-              <ChevronLeft size={18} />
+              ←
             </Link>
-            <h2 className="text-sm font-semibold capitalize">
-              {date.toLocaleDateString("es-NI", {
-                month: "long",
-                year: "numeric",
-                timeZone: "America/Managua",
-              })}
-            </h2>
+          </Button>
+          <span className="p-3 font-semibold">{month}</span>
+          <Button asChild variant="outline">
             <Link
               href={`/appointments?month=${shift(1)}`}
               aria-label="Mes siguiente"
-              className="p-2 rounded-lg hover:bg-emerald-50"
             >
-              <ChevronRight size={18} />
+              →
             </Link>
-          </div>
-          <div className="grid grid-cols-7 gap-1 text-center">
-            {["L", "M", "M", "J", "V", "S", "D"].map((day, i) => (
-              <span key={i} className="text-xs text-slate-400 py-2">
-                {day}
-              </span>
-            ))}
-            {Array.from({ length: offset }, (_, i) => (
-              <span key={`blank-${i}`} />
-            ))}
-            {Array.from({ length: days }, (_, i) => {
-              const day = String(i + 1).padStart(2, "0");
-              const count =
-                appointments.filter((a) => dayOf(a.nextAppointment!) === day)
-                  .length +
-                google.events.filter((e) => eventOnDay(e, day)).length;
-              return (
-                <Link
-                  key={day}
-                  href={`/appointments?month=${month}&day=${day}`}
-                  aria-label={`${i + 1}, ${count} citas`}
-                  className={`rounded-xl py-2 text-sm ${selectedDay === day ? "bg-emerald-800 text-white" : month + "-" + day === todayString() ? "bg-emerald-50 text-emerald-800" : "hover:bg-slate-50"}`}
-                >
-                  <span>{i + 1}</span>
-                  <span
-                    className={`block mx-auto mt-1 w-1 h-1 rounded-full ${count ? "bg-emerald-500" : "bg-transparent"}`}
-                  />
-                </Link>
-              );
-            })}
-          </div>
-          <Link
-            href={`/appointments?month=${month}`}
-            className="block text-center mt-5 text-xs text-emerald-700"
-          >
-            Ver todas las citas del mes (
-            {appointments.length + google.events.length})
-          </Link>
-        </section>
-        <section className="space-y-4">
-          <h2 className="font-semibold">
-            {selectedDay ? `Citas del ${selectedDay}` : "Citas del mes"}
-          </h2>
-          {external.map((event) => (
-            <article
-              key={event.id}
-              className="panel p-5 border-l-4 border-l-emerald-300"
-            >
-              <p className="text-xs text-emerald-700">
-                Google Calendar ·{" "}
-                {event.allDay ? "Todo el día" : appointmentLabel(event.start)}
-              </p>
-              <h3 className="text-lg font-semibold mt-2">{event.title}</h3>
-              <a
-                href="https://calendar.google.com"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-emerald-700 inline-block mt-3"
-              >
-                Abrir Google Calendar
-              </a>
-            </article>
+          </Button>
+        </div>
+      </div>
+      {google.error && (
+        <p role="alert" className="text-sm text-amber-800 panel p-4 mb-5">
+          {google.error}
+        </p>
+      )}
+      <details className="panel p-5 mb-6">
+        <summary className="font-semibold text-emerald-800 cursor-pointer">
+          Crear una cita
+        </summary>
+        <div className="mt-5">
+          <AppointmentEditor customers={serialize(customers)} />
+        </div>
+      </details>
+      <section className="panel p-3 sm:p-5 mb-6">
+        <div className="grid grid-cols-7 text-center text-xs text-slate-500 pb-3">
+          {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
+            <span key={d}>{d}</span>
           ))}
-          {shown.length ? (
-            shown.map((a) => (
-              <article key={a.id} className="panel p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-emerald-700 flex items-center gap-2">
-                      <CalendarDays size={15} />
-                      {appointmentLabel(a.nextAppointment!.toISOString())}
-                    </p>
-                    <h3 className="text-lg font-semibold mt-2">
-                      {a.customer.name}
-                    </h3>
-                    <p className="text-sm text-slate-500 mt-2">
-                      {a.items
-                        .filter((i) => i.sessionsTotal > 0)
-                        .map((i) => i.description)
-                        .join(" · ") || "Cita de seguimiento"}
-                    </p>
-                    {a.customer.phone && (
-                      <p className="text-xs text-slate-500 mt-2">
-                        {a.customer.phone}
-                      </p>
-                    )}
-                  </div>
-                  <Link
-                    href={`/invoices/${a.id}`}
-                    className="text-sm text-emerald-700"
-                  >
-                    Ver factura
-                  </Link>
-                </div>
-                {ctx.role !== "VIEWER" && (
-                  <div className="mt-4 pt-4 border-t border-slate-100">
-                    <AppointmentForm
-                      invoice={{
-                        id: a.id,
-                        nextAppointment: a.nextAppointment!.toISOString(),
-                      }}
-                    />
-                  </div>
+        </div>
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
+          {Array.from({ length: offset }, (_, i) => (
+            <span key={`blank${i}`} />
+          ))}
+          {Array.from({ length: days }, (_, i) => {
+            const day = String(i + 1).padStart(2, "0"),
+              count =
+                appointments.filter((a) => dayOf(a.start) === day).length +
+                external.filter(
+                  (e: { start: string }) => dayOf(e.start) === day,
+                ).length;
+            return (
+              <Link
+                key={day}
+                href={`/appointments?month=${month}&day=${day}`}
+                className={`rounded-xl p-2 sm:p-4 min-h-16 text-center ${selected === day ? "bg-emerald-100 text-emerald-900" : "bg-white/60 hover:bg-emerald-50"}`}
+              >
+                <span>{i + 1}</span>
+                {count > 0 && (
+                  <span className="block text-xs text-emerald-700 mt-1">
+                    {count} citas
+                  </span>
                 )}
-              </article>
-            ))
-          ) : (
-            <div className="panel p-8 text-center">
-              <CalendarDays size={32} className="mx-auto text-emerald-300" />
-              <p className="text-sm text-slate-500 mt-4">
-                No hay citas locales en este periodo.
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+      <h2 className="font-semibold text-lg mb-4">
+        {selected ? `Citas del ${selected}/${month.slice(5)}` : "Citas del mes"}
+      </h2>
+      <div className="space-y-4">
+        {appointments
+          .filter((a) => !selected || dayOf(a.start) === selected)
+          .map((a) => (
+            <section key={a.id} className="panel p-5">
+              <p className="text-sm text-emerald-800 font-medium">
+                {appointmentLabel(a.start.toISOString())}
               </p>
-              <p className="text-xs text-slate-400 mt-2">
-                Agenda la próxima visita al guardar una factura o desde el
-                seguimiento del paciente.
+              <h3 className="text-lg font-semibold mt-2">{a.title}</h3>
+              <p className="text-sm text-slate-600">{a.customer?.name}</p>
+              <p className="text-xs text-slate-500 mt-2">
+                {a.syncStatus === "SYNCED"
+                  ? "Sincronizada con Google"
+                  : google.connected
+                    ? "Pendiente de sincronización / ICS solo lectura"
+                    : "Cita local · Google sin enlazar"}
               </p>
-            </div>
-          )}
-        </section>
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm text-emerald-800">
+                  Mover o editar cita
+                </summary>
+                <div className="mt-4">
+                  <AppointmentEditor
+                    customers={serialize(customers)}
+                    initial={serialize(a)}
+                  />
+                </div>
+              </details>
+            </section>
+          ))}
+        {external
+          .filter(
+            (e: { start: string }) => !selected || dayOf(e.start) === selected,
+          )
+          .map((e: { id: string; start: string; title: string }) => (
+            <section key={e.id} className="panel p-5">
+              <p className="text-sm text-emerald-800">
+                {appointmentLabel(e.start)}
+              </p>
+              <h3 className="font-semibold mt-2">{e.title}</h3>
+              <p className="text-xs text-slate-500 mt-2">
+                Google / ICS · Edita este evento en Google Calendar.
+              </p>
+            </section>
+          ))}
       </div>
     </div>
   );

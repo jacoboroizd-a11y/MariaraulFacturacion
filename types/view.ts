@@ -54,6 +54,7 @@ export type Row = {
   invoice?: Row | null;
   invoices?: Row[];
   quotes?: Row[];
+  advances?: Row[];
   payments?: Row[];
   payment?: Row;
   receipt?: Row | null;
