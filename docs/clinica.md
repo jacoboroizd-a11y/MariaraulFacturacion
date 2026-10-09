@@ -6,7 +6,7 @@ Después de iniciar sesión, ADMIN y BILLING abren **Nueva venta**. VIEWER conse
 
 1. Toca tratamientos, paquetes o cosméticos para agregarlos. Ajusta la cantidad en el resumen.
 2. Escribe el nombre y teléfono opcional del cliente. Si existe, selecciona su coincidencia; si es nuevo, su ficha se crea automáticamente al guardar la factura, sin registro previo.
-3. Elige pago completo, abono o cobrar después. Para pagos recibidos, selecciona efectivo, tarjeta, transferencia u otro. Si queda saldo, indica su vencimiento.
+3. Elige pago completo, abono o cobrar después. Para pagos recibidos, selecciona efectivo, tarjeta, transferencia u otro. Las notas de venta no tienen fecha de vencimiento; los abonos y saldos se mantienen registrados.
 4. Agrega la próxima cita (hora de Nicaragua) y guarda. Desde el comprobante puedes imprimir, registrar otro abono o marcarlo como pagado sin salir de la factura.
 
 La factura, el cliente, las sesiones y el primer pago se guardan en una sola transacción. Un fallo revierte todo. Los reintentos de venta, cobro y entradas de inventario no duplican operaciones mientras se conserva la pantalla y su identificador de solicitud.
@@ -64,3 +64,7 @@ Después integrar la rama de clínica en `main` para que Vercel despliegue. No e
 ## Validación
 
 `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:integration`, `npm run build`, y `npm run test:e2e` con PostgreSQL y el servidor iniciado. Las pruebas usan datos aislados o identificados y eliminan sus propios registros.
+
+## Impuestos opcionales
+
+En Configuración → Impuestos puedes añadir un nombre y porcentaje, editarlo o desactivarlo. En cada tratamiento o cosmético, elige el impuesto correspondiente o Sin impuesto. Las ventas guardan el impuesto aplicado en ese momento; modificar la tarifa no altera los comprobantes anteriores.

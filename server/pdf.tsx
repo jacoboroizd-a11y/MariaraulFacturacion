@@ -131,11 +131,13 @@ export async function pdfDocument(row: Row, kind: string) {
               Fecha:{" "}
               {dateLabel(receipt ? row.payment!.paymentDate! : doc.date!, fmt)}
             </Text>
-            <Text style={{ marginTop: 7 }}>
-              {receipt
-                ? `Factura: ${doc.documentNumber}`
-                : `Vencimiento: ${dateLabel(doc.dueDate!, fmt)}`}
-            </Text>
+            {(receipt || kind === "quotes") && (
+              <Text style={{ marginTop: 7 }}>
+                {receipt
+                  ? `Factura: ${doc.documentNumber}`
+                  : `Vencimiento: ${dateLabel(doc.dueDate!, fmt)}`}
+              </Text>
+            )}
             <Text style={{ marginTop: 7 }}>
               Moneda: {currency} · TC: {doc.exchangeRate}
             </Text>

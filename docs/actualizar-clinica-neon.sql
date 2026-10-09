@@ -27,3 +27,19 @@ END $actualizar_clinica$;
 COMMIT;
 SELECT migration_name, finished_at IS NOT NULL AS aplicada
 FROM "_prisma_migrations" WHERE migration_name='20261009150000_clinic_sales';
+
+-- Notas de venta: vencimiento opcional en almacenamiento, sin vencimiento en nuevas ventas.
+BEGIN;
+DO $sin_vencimiento$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "_prisma_migrations" WHERE migration_name='20261009160000_sales_without_due_date' AND finished_at IS NOT NULL AND checksum='3fbeb9c51556c498d55491663bbbf554871bc59d600adddba0dc9e081a17d3a5') THEN
+    RETURN;
+  END IF;
+  IF EXISTS (SELECT 1 FROM "_prisma_migrations" WHERE migration_name='20261009160000_sales_without_due_date') THEN
+    RAISE EXCEPTION 'La migración ya está registrada con otro estado. Revisar antes de continuar.';
+  END IF;
+ALTER TABLE "Invoice" ALTER COLUMN "dueDate" DROP NOT NULL;
+  INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, applied_steps_count)
+    VALUES (gen_random_uuid()::text, '3fbeb9c51556c498d55491663bbbf554871bc59d600adddba0dc9e081a17d3a5', now(), '20261009160000_sales_without_due_date', 1);
+END $sin_vencimiento$;
+COMMIT;

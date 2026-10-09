@@ -264,7 +264,7 @@ model Invoice {
   quote            Quote?        @relation(fields: [quoteId, companyId], references: [id, companyId], onDelete: Restrict)
   documentNumber   String
   date             DateTime      @db.Date
-  dueDate          DateTime      @db.Date
+  dueDate          DateTime?     @db.Date
   currency         Currency
   exchangeRate     Decimal       @db.Decimal(18, 6)
   status           InvoiceStatus @default(DRAFT)

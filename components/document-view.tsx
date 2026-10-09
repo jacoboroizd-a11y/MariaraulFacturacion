@@ -71,12 +71,14 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
             <span className="text-slate-400 mr-3">Fecha</span>
             {dateLabel(receipt ? row.payment!.paymentDate! : doc.date!, fmt)}
           </p>
-          <p>
-            <span className="text-slate-400 mr-3">
-              {receipt ? "Factura" : "Vencimiento"}
-            </span>
-            {receipt ? doc.documentNumber : dateLabel(doc.dueDate!, fmt)}
-          </p>
+          {(receipt || kind === "quotes") && (
+            <p>
+              <span className="text-slate-400 mr-3">
+                {receipt ? "Factura" : "Vencimiento"}
+              </span>
+              {receipt ? doc.documentNumber : dateLabel(doc.dueDate!, fmt)}
+            </p>
+          )}
           <p>
             <span className="text-slate-400 mr-3">Moneda</span>
             {currency}

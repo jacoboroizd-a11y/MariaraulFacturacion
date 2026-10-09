@@ -62,7 +62,7 @@ export function paymentBalance(
 export function invoiceStatus(
   total: MoneyInput,
   paid: MoneyInput,
-  dueDate: Date,
+  dueDate: Date | null,
   current = "PENDING",
   today = new Date(),
 ) {
@@ -72,7 +72,7 @@ export function invoiceStatus(
     today.toLocaleDateString("en-CA", { timeZone: "America/Managua" }) +
       "T00:00:00Z",
   );
-  if (dueDate < day) return "OVERDUE";
+  if (dueDate && dueDate < day) return "OVERDUE";
   return decimal(paid).gt(0) ? "PARTIALLY_PAID" : "PENDING";
 }
 export function convertCurrency(

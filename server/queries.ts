@@ -385,7 +385,12 @@ export function displayInvoiceStatus(i: {
   status: string;
   total: string;
   amountPaid: string;
-  dueDate: string;
+  dueDate: string | null;
 }) {
-  return invoiceStatus(i.total, i.amountPaid, new Date(i.dueDate), i.status);
+  return invoiceStatus(
+    i.total,
+    i.amountPaid,
+    i.dueDate ? new Date(i.dueDate) : null,
+    i.status,
+  );
 }

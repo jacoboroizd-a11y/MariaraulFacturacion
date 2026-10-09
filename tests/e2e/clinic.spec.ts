@@ -73,6 +73,7 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     await expect(stockCard.getByText("6", { exact: true })).toBeVisible();
     await page.goto("/sales");
     await page.reload();
+    await expect(page.getByLabel("Fecha para pagar el saldo")).toHaveCount(0);
     await page.getByRole("button", { name: "Paquetes", exact: true }).click();
     await page
       .getByRole("button", { name: `Agregar Facial ${suffix}` })

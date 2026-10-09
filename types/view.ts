@@ -26,7 +26,7 @@ export type Row = {
   description?: string;
   documentNumber?: string;
   date?: string;
-  dueDate?: string;
+  dueDate?: string | null;
   currency?: string;
   exchangeRate?: string;
   status?: string;

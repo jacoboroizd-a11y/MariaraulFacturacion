@@ -41,7 +41,6 @@ const saleSchema = z
       .default("0"),
     method: paymentSchema.shape.method,
     nextAppointment: z.union([appointment, z.literal("")]).default(""),
-    dueDate: documentSchema.shape.dueDate,
     notes: z.string().trim().max(2000).default(""),
   })
   .refine(
@@ -144,7 +143,7 @@ export async function createClinicSale(ctx: Context, input: unknown) {
       const doc = documentSchema.parse({
         customerId,
         date: todayString(),
-        dueDate: data.dueDate,
+        dueDate: todayString(),
         currency: data.currency,
         exchangeRate: company.settings.exchangeRate.toString(),
         items: lines,

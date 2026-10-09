@@ -360,13 +360,14 @@ export async function saveDocumentTx(
     );
     return quote;
   }
-  const status = invoiceStatus(base.total, "0", base.dueDate, data.status) as
+  const status = invoiceStatus(base.total, "0", null, data.status) as
     "DRAFT" | "PENDING" | "OVERDUE";
   const invoice = id
     ? await tx.invoice.update({
         where: { id },
         data: {
           ...base,
+          dueDate: null,
           status,
           balanceDue: base.total,
           items: { deleteMany: {}, create: items },
@@ -375,6 +376,7 @@ export async function saveDocumentTx(
     : await tx.invoice.create({
         data: {
           ...base,
+          dueDate: null,
           status,
           balanceDue: base.total,
           companyId: ctx.companyId,
@@ -411,7 +413,7 @@ export async function convertQuote(ctx: Context, id: string) {
         customerId: quote.customerId,
         documentNumber: await nextNumber(tx, ctx.companyId, "invoice"),
         date: quote.date,
-        dueDate: quote.dueDate,
+        dueDate: null,
         currency: quote.currency,
         exchangeRate: quote.exchangeRate,
         discountRate: quote.discountRate,
@@ -420,7 +422,7 @@ export async function convertQuote(ctx: Context, id: string) {
         taxTotal: quote.taxTotal,
         total: quote.total,
         balanceDue: quote.total,
-        status: invoiceStatus(quote.total.toString(), "0", quote.dueDate) as
+        status: invoiceStatus(quote.total.toString(), "0", null) as
           "PENDING" | "OVERDUE",
         notes: quote.notes,
         terms: quote.terms,

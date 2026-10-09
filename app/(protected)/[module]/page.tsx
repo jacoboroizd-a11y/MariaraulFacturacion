@@ -89,7 +89,11 @@ export default async function Module({
           <SettingsForm company={opts.company} />
           <div className="space-y-6">
             <div className="panel p-6">
-              <h2 className="font-semibold mb-5">Impuestos</h2>
+              <h2 className="font-semibold mb-2">Impuestos</h2>
+              <p className="text-sm text-slate-500 mb-5">
+                Añade los impuestos que utilices y asígnalos a cada tratamiento
+                o cosmético desde el catálogo. Puedes vender sin impuesto.
+              </p>
               {taxes.map((t) => (
                 <div
                   className="flex justify-between items-center py-3 border-b border-slate-100 text-sm"
@@ -109,8 +113,8 @@ export default async function Module({
                   </Link>
                 </div>
               ))}
-              <details className="mt-5">
-                <summary className="cursor-pointer text-sm text-emerald-700">
+              <details className="mt-5" open={taxes.length === 0}>
+                <summary className="cursor-pointer rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
                   Agregar impuesto
                 </summary>
                 <div className="mt-4">

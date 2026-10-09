@@ -301,9 +301,9 @@ async function main() {
     amount: "500",
     method: "CASH",
     nextAppointment: "2099-02-01T10:30",
-    dueDate: "2099-02-01",
   };
   const sale = await createClinicSale(ctx, saleInput);
+  check(sale.dueDate === null, "Nota de venta no tiene vencimiento");
   check(
     sale.total.toString() === "1900" &&
       sale.amountPaid.toString() === "500" &&

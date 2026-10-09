@@ -27,7 +27,6 @@ import {
   decimal,
   formatMoney,
 } from "@/lib/money";
-import { todayString } from "@/lib/utils";
 import type { Options, Row } from "@/types/view";
 
 type CartItem = { productId: string; quantity: number };
@@ -46,7 +45,6 @@ export function ClinicSale({ options }: { options: Options }) {
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("CASH");
   const [nextAppointment, setNextAppointment] = useState("");
-  const [dueDate, setDueDate] = useState(todayString());
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<Row | null>(null);
@@ -158,7 +156,6 @@ export function ClinicSale({ options }: { options: Options }) {
             amount: amount || "0",
             method,
             nextAppointment,
-            dueDate,
             notes,
           },
         };
@@ -619,19 +616,6 @@ export function ClinicSale({ options }: { options: Options }) {
                   <option value="BANK_TRANSFER">Transferencia</option>
                   <option value="OTHER">Otro</option>
                 </select>
-              </div>
-            )}
-            {paymentMode !== "FULL" && (
-              <div>
-                <label htmlFor="saleDue">Fecha para pagar el saldo</label>
-                <Input
-                  id="saleDue"
-                  type="date"
-                  min={todayString()}
-                  required
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
               </div>
             )}
             <div className="rounded-lg bg-slate-50 p-3 flex justify-between text-sm">

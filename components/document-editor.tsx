@@ -119,7 +119,7 @@ export function DocumentEditor({
         {
           customerId,
           date,
-          dueDate: due,
+          dueDate: kind === "quotes" ? due : date,
           currency,
           exchangeRate: rate,
           items: lines,
@@ -200,16 +200,18 @@ export function DocumentEditor({
               onChange={(e) => setDate(e.target.value)}
             />
           </div>
-          <div>
-            <label htmlFor="dueDate">Vencimiento</label>
-            <Input
-              id="dueDate"
-              type="date"
-              min={date}
-              value={due}
-              onChange={(e) => setDue(e.target.value)}
-            />
-          </div>
+          {kind === "quotes" && (
+            <div>
+              <label htmlFor="dueDate">Vencimiento</label>
+              <Input
+                id="dueDate"
+                type="date"
+                min={date}
+                value={due}
+                onChange={(e) => setDue(e.target.value)}
+              />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="currency">Moneda</label>
