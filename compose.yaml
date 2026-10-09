@@ -1,0 +1,21 @@
+name: mariaraul-facturacion
+services:
+  db:
+    image: postgres:17
+    container_name: mariaraul-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mariaraul
+      POSTGRES_DB: mariaraul
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mariaraul -d mariaraul"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres_data:

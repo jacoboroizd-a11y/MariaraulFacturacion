@@ -1,0 +1,9 @@
+ALTER TABLE "CompanySettings" ADD CONSTRAINT "settings_valid" CHECK ("exchangeRate">0 AND "nextInvoice">0 AND "nextQuote">0 AND "nextReceipt">0 AND "primaryCurrency"<>"secondaryCurrency");
+ALTER TABLE "Tax" ADD CONSTRAINT "tax_rate_valid" CHECK ("rate">=0 AND "rate"<=100);
+ALTER TABLE "Product" ADD CONSTRAINT "product_price_valid" CHECK ("price">=0);
+ALTER TABLE "Quote" ADD CONSTRAINT "quote_financial_valid" CHECK ("exchangeRate">0 AND "discountRate">=0 AND "discountRate"<=100 AND "subtotal">=0 AND "discountTotal">=0 AND "discountTotal"<="subtotal" AND "taxTotal">=0 AND "total">0 AND "total"="subtotal"-"discountTotal"+"taxTotal" AND "dueDate">="date");
+ALTER TABLE "Invoice" ADD CONSTRAINT "invoice_financial_valid" CHECK ("exchangeRate">0 AND "discountRate">=0 AND "discountRate"<=100 AND "subtotal">=0 AND "discountTotal">=0 AND "discountTotal"<="subtotal" AND "taxTotal">=0 AND "total">0 AND "total"="subtotal"-"discountTotal"+"taxTotal" AND "amountPaid">=0 AND "amountPaid"<="total" AND "balanceDue"="total"-"amountPaid" AND "dueDate">="date");
+ALTER TABLE "QuoteItem" ADD CONSTRAINT "quote_item_financial_valid" CHECK ("quantity">0 AND "unitPrice">=0 AND "discountRate">=0 AND "discountRate"<=100 AND "taxRate">=0 AND "taxRate"<=100 AND "subtotal">=0 AND "discount">=0 AND "discount"<="subtotal" AND "tax">=0 AND "total"="subtotal"-"discount"+"tax");
+ALTER TABLE "InvoiceItem" ADD CONSTRAINT "invoice_item_financial_valid" CHECK ("quantity">0 AND "unitPrice">=0 AND "discountRate">=0 AND "discountRate"<=100 AND "taxRate">=0 AND "taxRate"<=100 AND "subtotal">=0 AND "discount">=0 AND "discount"<="subtotal" AND "tax">=0 AND "total"="subtotal"-"discount"+"tax");
+ALTER TABLE "Payment" ADD CONSTRAINT "payment_amount_valid" CHECK ("amount">0);
+ALTER TABLE "Receipt" ADD CONSTRAINT "receipt_balance_valid" CHECK ("balanceRemaining">=0);

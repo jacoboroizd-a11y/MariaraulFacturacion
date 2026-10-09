@@ -1,0 +1,368 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  BILLING
+  VIEWER
+}
+
+enum Currency {
+  NIO
+  USD
+}
+
+enum ProductType {
+  PRODUCT
+  SERVICE
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  CHECK
+  OTHER
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  passwordHash String
+  active       Boolean      @default(true)
+  memberships  Membership[]
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime     @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model LoginAttempt {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+}
+
+model Company {
+  id          String           @id @default(cuid())
+  name        String
+  tradeName   String           @default("")
+  ruc         String           @default("")
+  logo        String           @default("")
+  address     String           @default("")
+  phone       String           @default("")
+  email       String           @default("")
+  memberships Membership[]
+  customers   Customer[]
+  products    Product[]
+  quotes      Quote[]
+  invoices    Invoice[]
+  payments    Payment[]
+  receipts    Receipt[]
+  taxes       Tax[]
+  settings    CompanySettings?
+  auditLogs   AuditLog[]
+  createdAt   DateTime         @default(now())
+}
+
+model Membership {
+  id        String  @id @default(cuid())
+  userId    String
+  companyId String
+  role      Role
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([userId])
+}
+
+model CompanySettings {
+  companyId         String   @id
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  primaryCurrency   Currency @default(NIO)
+  secondaryCurrency Currency @default(USD)
+  exchangeRate      Decimal  @default(36.6243) @db.Decimal(18, 6)
+  invoicePrefix     String   @default("FAC-")
+  quotePrefix       String   @default("COT-")
+  receiptPrefix     String   @default("REC-")
+  nextInvoice       Int      @default(1)
+  nextQuote         Int      @default(1)
+  nextReceipt       Int      @default(1)
+  bankInfo          String   @default("")
+  terms             String   @default("")
+  notes             String   @default("")
+  dateFormat        String   @default("dd/MM/yyyy")
+}
+
+model Customer {
+  id        String    @id @default(cuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name      String
+  legalName String    @default("")
+  tradeName String    @default("")
+  ruc       String    @default("")
+  phone     String    @default("")
+  email     String    @default("")
+  address   String    @default("")
+  city      String    @default("")
+  notes     String    @default("")
+  active    Boolean   @default(true)
+  quotes    Quote[]
+  invoices  Invoice[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([id, companyId])
+  @@index([companyId, name])
+  @@index([companyId, createdAt])
+}
+
+model Tax {
+  id        String    @id @default(cuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name      String
+  rate      Decimal   @db.Decimal(7, 4)
+  active    Boolean   @default(true)
+  products  Product[]
+
+  @@unique([id, companyId])
+  @@index([companyId])
+}
+
+model Product {
+  id           String        @id @default(cuid())
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sku          String
+  name         String
+  description  String        @default("")
+  category     String        @default("")
+  type         ProductType   @default(PRODUCT)
+  quoteItems   QuoteItem[]
+  invoiceItems InvoiceItem[]
+  price        Decimal       @db.Decimal(18, 2)
+  currency     Currency      @default(NIO)
+  unit         String        @default("unidad")
+  taxId        String?
+  tax          Tax?          @relation(fields: [taxId, companyId], references: [id, companyId], onDelete: Restrict)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([companyId, sku])
+  @@unique([id, companyId])
+  @@index([companyId, name])
+}
+
+model Quote {
+  id               String      @id @default(cuid())
+  companyId        String
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customerId       String
+  customer         Customer    @relation(fields: [customerId, companyId], references: [id, companyId], onDelete: Restrict)
+  documentNumber   String
+  date             DateTime    @db.Date
+  dueDate          DateTime    @db.Date
+  currency         Currency
+  exchangeRate     Decimal     @db.Decimal(18, 6)
+  status           QuoteStatus @default(DRAFT)
+  discountRate     Decimal     @default(0) @db.Decimal(7, 4)
+  subtotal         Decimal     @db.Decimal(18, 2)
+  discountTotal    Decimal     @db.Decimal(18, 2)
+  taxTotal         Decimal     @db.Decimal(18, 2)
+  total            Decimal     @db.Decimal(18, 2)
+  notes            String      @default("")
+  terms            String      @default("")
+  customerSnapshot Json
+  companySnapshot  Json
+  items            QuoteItem[]
+  invoice          Invoice?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@unique([id, companyId])
+  @@unique([companyId, documentNumber])
+  @@index([companyId, status, date])
+  @@index([companyId, createdAt])
+  @@index([customerId])
+}
+
+model QuoteItem {
+  id           String   @id @default(cuid())
+  quoteId      String
+  companyId    String
+  quote        Quote    @relation(fields: [quoteId, companyId], references: [id, companyId], onDelete: Cascade)
+  productId    String?
+  product      Product? @relation(fields: [productId, companyId], references: [id, companyId], onDelete: Restrict)
+  description  String
+  quantity     Decimal  @db.Decimal(18, 4)
+  unitPrice    Decimal  @db.Decimal(18, 2)
+  discountRate Decimal  @default(0) @db.Decimal(7, 4)
+  taxRate      Decimal  @default(0) @db.Decimal(7, 4)
+  subtotal     Decimal  @db.Decimal(18, 2)
+  discount     Decimal  @db.Decimal(18, 2)
+  tax          Decimal  @db.Decimal(18, 2)
+  total        Decimal  @db.Decimal(18, 2)
+  position     Int
+
+  @@index([quoteId, companyId])
+  @@index([companyId, productId])
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  companyId        String
+  company          Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customerId       String
+  customer         Customer      @relation(fields: [customerId, companyId], references: [id, companyId], onDelete: Restrict)
+  quoteId          String?       @unique
+  quote            Quote?        @relation(fields: [quoteId, companyId], references: [id, companyId], onDelete: Restrict)
+  documentNumber   String
+  date             DateTime      @db.Date
+  dueDate          DateTime      @db.Date
+  currency         Currency
+  exchangeRate     Decimal       @db.Decimal(18, 6)
+  status           InvoiceStatus @default(DRAFT)
+  discountRate     Decimal       @default(0) @db.Decimal(7, 4)
+  subtotal         Decimal       @db.Decimal(18, 2)
+  discountTotal    Decimal       @db.Decimal(18, 2)
+  taxTotal         Decimal       @db.Decimal(18, 2)
+  total            Decimal       @db.Decimal(18, 2)
+  amountPaid       Decimal       @default(0) @db.Decimal(18, 2)
+  balanceDue       Decimal       @db.Decimal(18, 2)
+  notes            String        @default("")
+  terms            String        @default("")
+  customerSnapshot Json
+  companySnapshot  Json
+  items            InvoiceItem[]
+  payments         Payment[]
+  receipts         Receipt[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([id, companyId])
+  @@unique([companyId, documentNumber])
+  @@unique([quoteId, companyId])
+  @@index([companyId, status, date])
+  @@index([companyId, createdAt])
+  @@index([companyId, dueDate])
+  @@index([customerId])
+}
+
+model InvoiceItem {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  companyId    String
+  invoice      Invoice  @relation(fields: [invoiceId, companyId], references: [id, companyId], onDelete: Cascade)
+  productId    String?
+  product      Product? @relation(fields: [productId, companyId], references: [id, companyId], onDelete: Restrict)
+  description  String
+  quantity     Decimal  @db.Decimal(18, 4)
+  unitPrice    Decimal  @db.Decimal(18, 2)
+  discountRate Decimal  @default(0) @db.Decimal(7, 4)
+  taxRate      Decimal  @default(0) @db.Decimal(7, 4)
+  subtotal     Decimal  @db.Decimal(18, 2)
+  discount     Decimal  @db.Decimal(18, 2)
+  tax          Decimal  @db.Decimal(18, 2)
+  total        Decimal  @db.Decimal(18, 2)
+  position     Int
+
+  @@index([invoiceId, companyId])
+  @@index([companyId, productId])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  invoiceId   String
+  invoice     Invoice       @relation(fields: [invoiceId, companyId], references: [id, companyId], onDelete: Restrict)
+  amount      Decimal       @db.Decimal(18, 2)
+  currency    Currency
+  paymentDate DateTime      @db.Date
+  method      PaymentMethod
+  reference   String        @default("")
+  account     String        @default("")
+  notes       String        @default("")
+  receipt     Receipt?
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@unique([id, companyId])
+  @@index([invoiceId, companyId])
+  @@index([companyId, paymentDate])
+}
+
+model Receipt {
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  paymentId        String    @unique
+  payment          Payment   @relation(fields: [paymentId, companyId], references: [id, companyId], onDelete: Restrict)
+  invoiceId        String
+  invoice          Invoice   @relation(fields: [invoiceId, companyId], references: [id, companyId], onDelete: Restrict)
+  documentNumber   String
+  balanceRemaining Decimal   @db.Decimal(18, 2)
+  voidedAt         DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@unique([companyId, documentNumber])
+  @@unique([paymentId, companyId])
+  @@index([companyId, createdAt])
+  @@index([invoiceId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  entityType String
+  entityId   String
+  action     String
+  metadata   Json
+  timestamp  DateTime @default(now())
+
+  @@index([companyId, timestamp])
+  @@index([companyId, entityType, entityId])
+}
