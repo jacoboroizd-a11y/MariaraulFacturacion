@@ -82,7 +82,7 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     await page.getByLabel("Teléfono (opcional)").fill("88881111");
     await page.getByLabel("Cobro", { exact: true }).selectOption("PARTIAL");
     await page.getByLabel(/Abono recibido/).fill("100");
-    await page.getByLabel("Fecha para pagar el saldo").fill("2099-03-01");
+    await expect(page.getByLabel("Fecha para pagar el saldo")).toHaveCount(0);
     await page.getByLabel("Próxima cita (opcional)").fill("2099-03-01T10:00");
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
