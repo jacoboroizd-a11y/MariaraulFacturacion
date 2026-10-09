@@ -22,7 +22,9 @@ export function validateGoogleCalendarUrl(value: string) {
   try {
     url = new URL(value.trim());
   } catch {
-    throw new AppError("Pega el enlace privado de iCal de Google Calendar.");
+    throw new AppError(
+      "Pega el enlace público o privado de iCal de Google Calendar.",
+    );
   }
   if (
     url.protocol !== "https:" ||
@@ -132,16 +134,38 @@ export function parseGoogleCalendar(
   }
   return result.sort((a, b) => a.start.localeCompare(b.start));
 }
-async function fetchCalendar(url: string) {
-  const response = await fetch(validateGoogleCalendarUrl(url), {
-    redirect: "error",
-    cache: "no-store",
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok)
+export async function fetchCalendar(url: string) {
+  const validated = validateGoogleCalendarUrl(url);
+  const publicCalendar = new URL(validated).pathname.includes("/public/");
+  let response: Response;
+  try {
+    response = await fetch(validated, {
+      redirect: "error",
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
     throw new AppError(
-      "Google no permitió leer el calendario. Revisa su dirección secreta de iCal.",
+      "No se pudo conectar con Google Calendar. Reintenta o descarga el archivo .ics y súbelo aquí.",
     );
+  }
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 410)
+      throw new AppError(
+        publicCalendar
+          ? "Google no encuentra este calendario público. Comprueba que esté compartido públicamente o usa su dirección secreta de iCal. También puedes subir un archivo .ics."
+          : "Google no encuentra este enlace privado. Copia la dirección secreta de iCal actual desde la configuración del calendario. También puedes subir un archivo .ics.",
+      );
+    if (response.status === 401 || response.status === 403)
+      throw new AppError(
+        publicCalendar
+          ? "Google no permite consultar este calendario públicamente. Revisa sus permisos o usa su dirección secreta de iCal."
+          : "Google rechazó el acceso al calendario privado. Copia la dirección secreta de iCal actual o conecta la cuenta de Google.",
+      );
+    throw new AppError(
+      `Google Calendar no está disponible (HTTP ${response.status}). Reintenta o sube un archivo .ics.`,
+    );
+  }
   if (Number(response.headers.get("content-length") || 0) > 2 * 1024 * 1024)
     throw new AppError("El calendario supera los 2 MB.");
   const reader = response.body?.getReader();

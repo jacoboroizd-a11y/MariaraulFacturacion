@@ -1,5 +1,6 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
 import {
+  fetchCalendar,
   parseGoogleCalendar,
   validateGoogleCalendarUrl,
   encryptCalendarUrl,
@@ -106,4 +107,35 @@ END:VEVENT`.replaceAll("\n", "\r\n"),
     "2026-10",
   );
   expect(events[0].start).toBe("2026-10-09T16:00:00.000Z");
+});
+
+test("explica permisos y enlaces inexistentes sin divulgar el enlace privado", async () => {
+  try {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 403 })),
+    );
+    await expect(
+      fetchCalendar(
+        "https://calendar.google.com/calendar/ical/a/public/basic.ics",
+      ),
+    ).rejects.toThrow("públicamente");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 404 })),
+    );
+    await expect(
+      fetchCalendar(
+        "https://calendar.google.com/calendar/ical/a/private-abc/basic.ics",
+      ),
+    ).rejects.toThrow("dirección secreta de iCal actual");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network")));
+    await expect(
+      fetchCalendar(
+        "https://calendar.google.com/calendar/ical/a/public/basic.ics",
+      ),
+    ).rejects.toThrow("No se pudo conectar");
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
