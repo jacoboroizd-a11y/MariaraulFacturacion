@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
-export default function Home() {
-  redirect("/dashboard");
+import { pageContext } from "@/server/auth";
+export default async function Home() {
+  const ctx = await pageContext();
+  redirect(ctx.role === "VIEWER" ? "/dashboard" : "/sales");
 }

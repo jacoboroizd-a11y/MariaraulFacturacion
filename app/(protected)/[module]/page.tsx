@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Plus, ArrowRight } from "lucide-react";
+import { Plus, ArrowRight, Sparkles, ShoppingBag, Layers } from "lucide-react";
 import { pageContext } from "@/server/auth";
 import { list, options, analytics, serialize } from "@/server/queries";
 import { DataTable } from "@/components/table";
 import { SettingsForm, EntityForm, MemberControls } from "@/components/forms";
 import { Reports } from "@/components/reports";
 import { Button } from "@/components/ui/button";
+import { CatalogImport } from "@/components/catalog-import";
+import { formatMoney } from "@/lib/money";
 import type { Row } from "@/types/view";
 const names: Record<
   string,
@@ -14,13 +16,13 @@ const names: Record<
 > = {
   customers: {
     title: "Clientes",
-    description: "Todas tus relaciones comerciales, en un solo lugar.",
+    description: "Tus clientes y su historial de tratamientos y compras.",
     new: "Nuevo cliente",
   },
   products: {
-    title: "Productos y servicios",
-    description: "Tu catálogo, listo para cotizar y facturar.",
-    new: "Nuevo producto",
+    title: "Tratamientos y cosméticos",
+    description: "Precios, tratamientos individuales y paquetes de sesiones.",
+    new: "Agregar al catálogo",
   },
   quotes: {
     title: "Cotizaciones",
@@ -30,7 +32,7 @@ const names: Record<
   invoices: {
     title: "Facturas",
     description: "Controla tus ventas y el saldo de cada factura.",
-    new: "Nueva factura",
+    new: "Nueva venta",
   },
   payments: {
     title: "Pagos",
@@ -152,6 +154,70 @@ export default async function Module({
       </>
     );
   }
+  if (module === "products") {
+    const products: Row[] = serialize(await list(ctx, "products"));
+    return (
+      <>
+        <Heading
+          config={config}
+          module={module}
+          canWrite={ctx.role !== "VIEWER"}
+        />
+        {ctx.role !== "VIEWER" && <CatalogImport products={products} />}
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+          {products.map((p) => {
+            const Icon =
+              p.type === "PRODUCT"
+                ? ShoppingBag
+                : (p.sessions || 1) > 1
+                  ? Layers
+                  : Sparkles;
+            return (
+              <Link
+                href={`/products/${p.id}`}
+                key={p.id}
+                className="panel p-6 hover:border-emerald-500 transition-colors"
+              >
+                <div className="flex justify-between items-center">
+                  <span
+                    className={`p-4 rounded-2xl ${p.type === "PRODUCT" ? "bg-amber-50 text-amber-600" : "bg-violet-50 text-violet-600"}`}
+                  >
+                    <Icon size={28} />
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {!p.active
+                      ? "Inactivo"
+                      : p.type === "PRODUCT"
+                        ? "Cosmético"
+                        : "Tratamiento"}
+                  </span>
+                </div>
+                <h2 className="font-semibold text-lg mt-5">{p.name}</h2>
+                <p className="text-emerald-800 text-xl font-semibold mt-3">
+                  {formatMoney(p.price || "0", p.currency)}
+                  {p.pricingMode === "PER_UNIT" && (
+                    <span className="text-xs font-normal"> / {p.unit}</span>
+                  )}
+                </p>
+                <p className="text-xs text-slate-500 mt-3">
+                  {p.type === "PRODUCT"
+                    ? `${p.stock || 0} unidades disponibles`
+                    : p.pricingMode === "PER_UNIT"
+                      ? "Total automático según unidades aplicadas"
+                      : `${p.sessions || 1} sesiones incluidas`}
+                </p>
+              </Link>
+            );
+          })}
+        </div>
+        {!products.length && (
+          <div className="panel p-10 text-center text-slate-500 text-sm">
+            Agrega un tratamiento o importa tu lista para comenzar.
+          </div>
+        )}
+      </>
+    );
+  }
   return (
     <>
       <Heading
@@ -182,7 +248,7 @@ function Heading({
       </div>
       {config.new && canWrite && (
         <Button asChild>
-          <Link href={"/" + module + "/new"}>
+          <Link href={module === "invoices" ? "/sales" : "/" + module + "/new"}>
             <Plus size={15} />
             {config.new}
           </Link>

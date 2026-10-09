@@ -42,3 +42,18 @@ export function todayString() {
     timeZone: "America/Managua",
   });
 }
+
+export function appointmentLabel(value: string | Date) {
+  return new Intl.DateTimeFormat("es-NI", {
+    timeZone: "America/Managua",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+export function appointmentInput(value?: string | null) {
+  return value
+    ? new Date(new Date(value).getTime() - 6 * 3600000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
+}

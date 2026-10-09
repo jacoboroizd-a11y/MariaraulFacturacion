@@ -65,7 +65,13 @@ function Fields({
               id={prefix + f.key}
               type={f.type || "text"}
               required={f.required}
-              step={f.type === "number" ? "0.01" : undefined}
+              step={
+                f.type === "number"
+                  ? ["sessions", "stock"].includes(f.key)
+                    ? "1"
+                    : "0.01"
+                  : undefined
+              }
               {...register(f.key)}
             />
           )}
@@ -87,7 +93,10 @@ export function EntityForm({
   const router = useRouter();
   const defaults: Record<string, string | boolean | number> = {
     active: true,
-    type: "PRODUCT",
+    type: "SERVICE",
+    sessions: 1,
+    stock: 0,
+    pricingMode: "FIXED",
     currency: "NIO",
     unit: "unidad",
     price: "0",
@@ -129,11 +138,33 @@ export function EntityForm({
       key: "type",
       label: "Tipo",
       options: [
-        { value: "PRODUCT", label: "Producto" },
-        { value: "SERVICE", label: "Servicio" },
+        { value: "PRODUCT", label: "Cosmético" },
+        { value: "SERVICE", label: "Tratamiento / paquete" },
       ],
     },
     { key: "category", label: "Categoría" },
+    {
+      key: "stock",
+      label: "Existencias iniciales / actuales (solo cosméticos)",
+      type: "number",
+    },
+    {
+      key: "sessions",
+      label: "Sesiones incluidas (1 para tratamiento individual)",
+      type: "number",
+      required: true,
+    },
+    {
+      key: "pricingMode",
+      label: "Cómo se cobra",
+      options: [
+        {
+          value: "FIXED",
+          label: "Precio fijo (tratamiento, paquete o cosmético)",
+        },
+        { value: "PER_UNIT", label: "Precio por unidad aplicada (ej. Botox)" },
+      ],
+    },
     { key: "price", label: "Precio", type: "number", required: true },
     {
       key: "currency",

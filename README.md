@@ -4,6 +4,10 @@ MVP de facturación para empresas nicaragüenses, construido con Next.js App Rou
 
 Incluye clientes, catálogo de productos/servicios, cotizaciones, conversión a facturas, pagos parciales, recibos, PDFs vectoriales, dashboard, reportes, búsqueda, configuración, impuestos, usuarios y auditoría. NIO y USD usan tipos de cambio históricos por documento.
 
+## Clínica y cosméticos
+
+La pantalla principal es **Nueva venta**: tarjetas de catálogo, clientes registrados al guardar, paquetes de sesiones, precio por unidad aplicada, cobro y abonos dentro de la factura, citas, impresión e inventario de cosméticos. Incluye importación Excel/CSV con vista previa. Consulta [el flujo y la actualización de producción](docs/clinica.md).
+
 ## Requisitos
 
 - Node.js 22 o 24 y npm (el entorno se validó con Node 24).

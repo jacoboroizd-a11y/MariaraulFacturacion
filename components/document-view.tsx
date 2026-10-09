@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { formatMoney, convertCurrency } from "@/lib/money";
-import { dateLabel, labels } from "@/lib/utils";
+import { dateLabel, labels, appointmentLabel } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import type { Row } from "@/types/view";
 export function DocumentView({ row, kind }: { row: Row; kind: string }) {
@@ -187,6 +187,57 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
         </>
       )}
       <div className="mt-10 pt-6 border-t border-slate-100 space-y-4">
+        {kind === "invoices" && (
+          <div className="mt-6 text-sm">
+            <h3 className="font-semibold mb-3">Método de pago / abonos</h3>
+            {doc.payments?.length ? (
+              <div className="space-y-2">
+                {doc.payments.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex flex-wrap justify-between gap-2"
+                  >
+                    <span>
+                      {dateLabel(p.paymentDate!, fmt)} ·{" "}
+                      {labels[p.method || ""] || p.method}
+                      {p.reference ? ` · ${p.reference}` : ""}
+                    </span>
+                    <strong>{formatMoney(p.amount || 0, currency)}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-500">
+                Sin pagos registrados · Pendiente de cobro
+              </p>
+            )}
+          </div>
+        )}
+        {doc.nextAppointment && (
+          <div className="mt-6 rounded-xl bg-emerald-50 p-5">
+            <p className="text-xs font-semibold uppercase text-emerald-700">
+              Próxima cita
+            </p>
+            <p className="mt-2 font-semibold">
+              {appointmentLabel(doc.nextAppointment)}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Hora de Nicaragua</p>
+          </div>
+        )}
+        {doc.items?.some((i) => (i.sessionsTotal || 0) > 0) && (
+          <div className="mt-6 space-y-2 text-sm">
+            <h3 className="font-semibold">Tratamientos y sesiones</h3>
+            {doc.items
+              .filter((i) => (i.sessionsTotal || 0) > 0)
+              .map((i) => (
+                <p key={i.id}>
+                  {i.description}: {i.sessionsUsed || 0} de {i.sessionsTotal}{" "}
+                  realizadas · {(i.sessionsTotal || 0) - (i.sessionsUsed || 0)}{" "}
+                  disponibles
+                </p>
+              ))}
+          </div>
+        )}
         {!receipt && doc.notes && (
           <div>
             <p className="text-xs font-semibold mb-2">Notas</p>

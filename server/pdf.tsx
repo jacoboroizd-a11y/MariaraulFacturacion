@@ -8,7 +8,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { formatMoney, convertCurrency } from "@/lib/money";
-import { dateLabel, labels } from "@/lib/utils";
+import { dateLabel, labels, appointmentLabel } from "@/lib/utils";
 import type { Row } from "@/types/view";
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: "Helvetica", fontSize: 9, color: "#243c35" },
@@ -248,6 +248,59 @@ export async function pdfDocument(row: Row, kind: string) {
               )}
             </View>
           </>
+        )}
+        {kind === "invoices" && (
+          <View style={styles.section}>
+            <Text style={{ fontFamily: "Helvetica-Bold", marginBottom: 6 }}>
+              Método de pago / abonos
+            </Text>
+            {doc.payments?.length ? (
+              doc.payments.map((p) => (
+                <View style={styles.summaryRow} key={p.id} wrap={false}>
+                  <Text style={{ maxWidth: "75%" }}>
+                    {dateLabel(p.paymentDate!, fmt)} ·{" "}
+                    {labels[p.method || ""] || p.method}
+                    {p.reference ? ` · ${p.reference}` : ""}
+                  </Text>
+                  <Text>{formatMoney(p.amount || 0, currency)}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.muted}>
+                Sin pagos registrados · Pendiente de cobro
+              </Text>
+            )}
+          </View>
+        )}
+        {doc.nextAppointment && (
+          <View
+            style={[
+              styles.section,
+              { padding: 14, backgroundColor: "#edf4f0" },
+            ]}
+            wrap={false}
+          >
+            <Text style={{ fontFamily: "Helvetica-Bold" }}>Próxima cita</Text>
+            <Text style={{ marginTop: 6 }}>
+              {appointmentLabel(doc.nextAppointment)} · Hora de Nicaragua
+            </Text>
+          </View>
+        )}
+        {doc.items?.some((i) => (i.sessionsTotal || 0) > 0) && (
+          <View style={styles.section}>
+            <Text style={{ fontFamily: "Helvetica-Bold", marginBottom: 6 }}>
+              Tratamientos y sesiones
+            </Text>
+            {doc.items
+              .filter((i) => (i.sessionsTotal || 0) > 0)
+              .map((i) => (
+                <Text key={i.id} style={styles.muted}>
+                  {i.description}: {i.sessionsUsed || 0} de {i.sessionsTotal}{" "}
+                  realizadas · {(i.sessionsTotal || 0) - (i.sessionsUsed || 0)}{" "}
+                  disponibles
+                </Text>
+              ))}
+          </View>
         )}
         {!receipt && doc.notes && (
           <View style={styles.section}>

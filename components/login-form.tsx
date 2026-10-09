@@ -32,7 +32,7 @@ export function LoginForm() {
             setError(data.error);
             return;
           }
-          router.push("/dashboard");
+          router.push("/");
           router.refresh();
         } catch {
           setError("No se pudo conectar. Inténtalo de nuevo.");

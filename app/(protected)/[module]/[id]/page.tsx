@@ -9,6 +9,8 @@ import { DocumentEditor } from "@/components/document-editor";
 import { DocumentView } from "@/components/document-view";
 import { PaymentForm } from "@/components/payment-form";
 import { DataTable } from "@/components/table";
+import { InlinePayment } from "@/components/inline-payment";
+import { AppointmentForm, SessionButton } from "@/components/clinic-followup";
 import { PrintButton } from "@/components/print-button";
 import { Button } from "@/components/ui/button";
 import { formatMoney, decimal } from "@/lib/money";
@@ -347,7 +349,7 @@ export default async function DetailPage({
                   )}
                   {!["DRAFT", "VOID", "PAID"].includes(row.status || "") && (
                     <Button size="sm" asChild>
-                      <Link href={`/payments/new?invoice=${id}`}>
+                      <Link href="#cobrar">
                         <Plus size={13} />
                         Registrar pago
                       </Link>
@@ -368,6 +370,34 @@ export default async function DetailPage({
         </div>
       </div>
       <DocumentView row={row} kind={module} />
+      {module === "invoices" &&
+        writable &&
+        !["VOID", "DRAFT"].includes(row.status || "") && (
+          <InlinePayment invoice={row} />
+        )}
+      {module === "invoices" &&
+        writable &&
+        !["VOID", "DRAFT"].includes(row.status || "") && (
+          <div className="panel p-6 mt-6 no-print space-y-5">
+            <h2 className="font-semibold">Seguimiento del tratamiento</h2>
+            {row.items
+              ?.filter((i) => (i.sessionsTotal || 0) > 0)
+              .map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-wrap justify-between gap-3 items-center text-sm"
+                >
+                  <span>
+                    {item.description} ·{" "}
+                    {(item.sessionsTotal || 0) - (item.sessionsUsed || 0)}{" "}
+                    sesiones disponibles
+                  </span>
+                  <SessionButton item={item} />
+                </div>
+              ))}
+            <AppointmentForm invoice={row} />
+          </div>
+        )}
       {module === "quotes" && row.invoice && (
         <p className="mt-5 text-sm text-emerald-700">
           <Link href={"/invoices/" + row.invoice.id}>

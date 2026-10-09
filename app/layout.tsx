@@ -3,7 +3,8 @@ import { Toaster } from "sonner";
 import "./globals.css";
 export const metadata: Metadata = {
   title: "Mariaraul · Facturación",
-  description: "Facturación y cuentas por cobrar para empresas nicaragüenses.",
+  description:
+    "Ventas, tratamientos, citas e inventario para clínica y cosméticos.",
 };
 export default function RootLayout({
   children,

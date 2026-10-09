@@ -92,33 +92,56 @@ export async function saveProduct(ctx: Context, input: unknown, id?: string) {
   authorize(ctx);
   const data = productSchema.parse(input);
   data.taxId = data.taxId || null;
-  return transaction(async (tx) => {
-    if (
-      id &&
-      !(await tx.product.findFirst({ where: { id, companyId: ctx.companyId } }))
-    )
-      throw new AppError("Producto no encontrado.", 404);
-    if (
-      data.taxId &&
-      !(await tx.tax.findFirst({
-        where: { id: data.taxId, companyId: ctx.companyId, active: true },
-      }))
-    )
-      throw new AppError("Impuesto no válido.");
-    const product = id
-      ? await tx.product.update({ where: { id }, data })
-      : await tx.product.create({
-          data: { ...data, companyId: ctx.companyId },
-        });
-    await audit(
-      tx,
-      ctx,
-      "Product",
-      product.id,
-      id ? "PRODUCT_UPDATED" : "PRODUCT_CREATED",
+  return transaction((tx) => saveProductTx(tx, ctx, data, id));
+}
+export async function saveProductTx(
+  tx: Tx,
+  ctx: Context,
+  data: z.infer<typeof productSchema>,
+  id?: string,
+) {
+  if (
+    id &&
+    !(await tx.product.findFirst({ where: { id, companyId: ctx.companyId } }))
+  )
+    throw new AppError("Producto no encontrado.", 404);
+  if (
+    data.taxId &&
+    !(await tx.tax.findFirst({
+      where: { id: data.taxId, companyId: ctx.companyId, active: true },
+    }))
+  )
+    throw new AppError("Impuesto no válido.");
+  const previous = id
+    ? await tx.product.findUniqueOrThrow({ where: { id } })
+    : null;
+  if (
+    previous &&
+    previous.type !== data.type &&
+    (await tx.invoiceItem.count({ where: { productId: id } }))
+  )
+    throw new AppError(
+      "Un artículo facturado no puede cambiar entre cosmético y tratamiento.",
     );
-    return product;
-  });
+  const product = id
+    ? await tx.product.update({ where: { id }, data })
+    : await tx.product.create({
+        data: { ...data, companyId: ctx.companyId },
+      });
+  if (data.stock !== undefined && (previous?.stock || 0) !== product.stock)
+    await audit(tx, ctx, "Product", product.id, "STOCK_ADJUSTED", {
+      quantity: product.stock - (previous?.stock || 0),
+      balance: product.stock,
+      reason: previous ? "Ajuste desde catálogo" : "Inventario inicial",
+    });
+  await audit(
+    tx,
+    ctx,
+    "Product",
+    product.id,
+    id ? "PRODUCT_UPDATED" : "PRODUCT_CREATED",
+  );
+  return product;
 }
 export async function saveTax(ctx: Context, input: unknown, id?: string) {
   authorize(ctx, true);
@@ -236,130 +259,139 @@ export async function saveDocument(
     throw new AppError("Estado de factura inválido.");
   if (kind === "quotes" && data.status === "PENDING")
     throw new AppError("Estado de cotización inválido.");
-  return transaction(async (tx) => {
-    const customer = await scopedCustomer(tx, ctx, data.customerId);
-    if (!customer.active) throw new AppError("El cliente está inactivo.");
-    const company = await tx.company.findUniqueOrThrow({
-      where: { id: ctx.companyId },
-      include: { settings: true },
-    });
-    const productIds = [
-      ...new Set(data.items.flatMap((i) => (i.productId ? [i.productId] : []))),
-    ];
-    if (
-      (await tx.product.count({
-        where: {
-          companyId: ctx.companyId,
-          id: { in: productIds },
-          active: true,
-        },
-      })) !== productIds.length
-    )
-      throw new AppError(
-        "Uno de los productos no está disponible en esta empresa.",
-      );
-    if (id) {
-      const existing =
-        kind === "invoices"
-          ? await tx.invoice.findFirst({
-              where: { id, companyId: ctx.companyId },
-            })
-          : await tx.quote.findFirst({
-              where: { id, companyId: ctx.companyId },
-            });
-      if (!existing) throw new AppError("Documento no encontrado.", 404);
-      if (kind === "invoices" && existing.status !== "DRAFT")
-        throw new AppError("Solo se pueden editar facturas en borrador.");
-      if (kind === "quotes" && existing.status === "CONVERTED")
-        throw new AppError("La cotización ya fue convertida.");
-    }
-    const computed = calculateDocument(data.items, data.discountRate);
-    if (decimal(computed.total).lte(0))
-      throw new AppError("El total del documento debe ser mayor que cero.");
-    const values = [
-      computed.subtotal,
-      computed.discountTotal,
-      computed.taxTotal,
-      computed.total,
-      ...computed.items.flatMap((item) => [
-        item.subtotal,
-        item.discount,
-        item.tax,
-        item.total,
-      ]),
-    ];
-    if (values.some((value) => decimal(value).gte("10000000000000000")))
-      throw new AppError("El documento excede el límite de importe admitido.");
-    const { items, ...totals } = computed;
-    const base = {
-      customerId: customer.id,
-      date: new Date(data.date),
-      dueDate: new Date(data.dueDate),
-      currency: data.currency,
-      exchangeRate: data.exchangeRate,
-      discountRate: data.discountRate,
-      notes: data.notes,
-      terms: data.terms,
-      ...totals,
-      ...snapshots(customer, company),
-    };
-    if (kind === "quotes") {
-      const status = data.status as
-        "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
-      const quote = id
-        ? await tx.quote.update({
-            where: { id },
-            data: { ...base, status, items: { deleteMany: {}, create: items } },
+  return transaction((tx) => saveDocumentTx(tx, ctx, kind, data, id));
+}
+export async function saveDocumentTx(
+  tx: Tx,
+  ctx: Context,
+  kind: "quotes" | "invoices",
+  data: z.infer<typeof documentSchema>,
+  id?: string,
+) {
+  const customer = await scopedCustomer(tx, ctx, data.customerId);
+  if (!customer.active) throw new AppError("El cliente está inactivo.");
+  const company = await tx.company.findUniqueOrThrow({
+    where: { id: ctx.companyId },
+    include: { settings: true },
+  });
+  const productIds = [
+    ...new Set(data.items.flatMap((i) => (i.productId ? [i.productId] : []))),
+  ];
+  if (
+    (await tx.product.count({
+      where: {
+        companyId: ctx.companyId,
+        id: { in: productIds },
+        active: true,
+      },
+    })) !== productIds.length
+  )
+    throw new AppError(
+      "Uno de los productos no está disponible en esta empresa.",
+    );
+  if (id) {
+    const existing =
+      kind === "invoices"
+        ? await tx.invoice.findFirst({
+            where: { id, companyId: ctx.companyId },
           })
-        : await tx.quote.create({
-            data: {
-              ...base,
-              status,
-              companyId: ctx.companyId,
-              documentNumber: await nextNumber(tx, ctx.companyId, "quote"),
-              items: { create: items },
-            },
+        : await tx.quote.findFirst({
+            where: { id, companyId: ctx.companyId },
           });
-      await audit(
-        tx,
-        ctx,
-        "Quote",
-        quote.id,
-        id ? "QUOTE_UPDATED" : "QUOTE_CREATED",
-      );
-      return quote;
-    }
-    const status = invoiceStatus(base.total, "0", base.dueDate, data.status) as
-      "DRAFT" | "PENDING" | "OVERDUE";
-    const invoice = id
-      ? await tx.invoice.update({
+    if (!existing) throw new AppError("Documento no encontrado.", 404);
+    if (kind === "invoices" && existing.status !== "DRAFT")
+      throw new AppError("Solo se pueden editar facturas en borrador.");
+    if (kind === "quotes" && existing.status === "CONVERTED")
+      throw new AppError("La cotización ya fue convertida.");
+  }
+  const computed = calculateDocument(data.items, data.discountRate);
+  if (decimal(computed.total).lte(0))
+    throw new AppError("El total del documento debe ser mayor que cero.");
+  const values = [
+    computed.subtotal,
+    computed.discountTotal,
+    computed.taxTotal,
+    computed.total,
+    ...computed.items.flatMap((item) => [
+      item.subtotal,
+      item.discount,
+      item.tax,
+      item.total,
+    ]),
+  ];
+  if (values.some((value) => decimal(value).gte("10000000000000000")))
+    throw new AppError("El documento excede el límite de importe admitido.");
+  const { items, ...totals } = computed;
+  const base = {
+    customerId: customer.id,
+    date: new Date(data.date),
+    dueDate: new Date(data.dueDate),
+    currency: data.currency,
+    exchangeRate: data.exchangeRate,
+    discountRate: data.discountRate,
+    notes: data.notes,
+    terms: data.terms,
+    ...totals,
+    ...snapshots(customer, company),
+  };
+  if (kind === "quotes") {
+    const status = data.status as
+      "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
+    const quote = id
+      ? await tx.quote.update({
           where: { id },
-          data: {
-            ...base,
-            status,
-            balanceDue: base.total,
-            items: { deleteMany: {}, create: items },
-          },
+          data: { ...base, status, items: { deleteMany: {}, create: items } },
         })
-      : await tx.invoice.create({
+      : await tx.quote.create({
           data: {
             ...base,
             status,
-            balanceDue: base.total,
             companyId: ctx.companyId,
-            documentNumber: await nextNumber(tx, ctx.companyId, "invoice"),
+            documentNumber: await nextNumber(tx, ctx.companyId, "quote"),
             items: { create: items },
           },
         });
     await audit(
       tx,
       ctx,
-      "Invoice",
-      invoice.id,
-      id ? "INVOICE_UPDATED" : "INVOICE_CREATED",
+      "Quote",
+      quote.id,
+      id ? "QUOTE_UPDATED" : "QUOTE_CREATED",
     );
-    return invoice;
-  });
+    return quote;
+  }
+  const status = invoiceStatus(base.total, "0", base.dueDate, data.status) as
+    "DRAFT" | "PENDING" | "OVERDUE";
+  const invoice = id
+    ? await tx.invoice.update({
+        where: { id },
+        data: {
+          ...base,
+          status,
+          balanceDue: base.total,
+          items: { deleteMany: {}, create: items },
+        },
+      })
+    : await tx.invoice.create({
+        data: {
+          ...base,
+          status,
+          balanceDue: base.total,
+          companyId: ctx.companyId,
+          documentNumber: await nextNumber(tx, ctx.companyId, "invoice"),
+          items: { create: items },
+        },
+      });
+  if (invoice.status !== "DRAFT")
+    await applyInvoiceStock(tx, ctx, invoice.id, -1);
+  await audit(
+    tx,
+    ctx,
+    "Invoice",
+    invoice.id,
+    id ? "INVOICE_UPDATED" : "INVOICE_CREATED",
+  );
+  return invoice;
 }
 export async function convertQuote(ctx: Context, id: string) {
   authorize(ctx);
@@ -411,6 +443,7 @@ export async function convertQuote(ctx: Context, id: string) {
         },
       },
     });
+    await applyInvoiceStock(tx, ctx, invoice.id, -1);
     await tx.quote.update({ where: { id }, data: { status: "CONVERTED" } });
     await audit(tx, ctx, "Quote", id, "QUOTE_CONVERTED", {
       invoiceId: invoice.id,
@@ -477,11 +510,20 @@ export async function documentAction(
           ) as "PENDING" | "OVERDUE",
         },
       });
+      await applyInvoiceStock(tx, ctx, id, -1);
       await audit(tx, ctx, "Invoice", id, "INVOICE_UPDATED", { issued: true });
       return result;
     }
     if (action === "void") {
       if (invoice.status === "VOID") return invoice;
+      if (
+        await tx.invoiceItem.count({
+          where: { invoiceId: id, sessionsUsed: { gt: 0 } },
+        })
+      )
+        throw new AppError(
+          "La factura tiene sesiones realizadas y no se puede anular.",
+        );
       if (invoice.amountPaid.gt(0))
         throw new AppError(
           "Elimina o revierte los pagos antes de anular la factura.",
@@ -490,6 +532,7 @@ export async function documentAction(
         where: { id },
         data: { status: "VOID" },
       });
+      if (invoice.status !== "DRAFT") await applyInvoiceStock(tx, ctx, id, 1);
       await audit(tx, ctx, "Invoice", id, "INVOICE_VOIDED");
       return result;
     }
@@ -499,58 +542,95 @@ export async function documentAction(
 export async function createPayment(ctx: Context, input: unknown) {
   authorize(ctx);
   const data = paymentSchema.parse(input);
-  return transaction(async (tx) => {
-    const invoice = await tx.invoice.findFirst({
-      where: { id: data.invoiceId, companyId: ctx.companyId },
-    });
-    if (!invoice) throw new AppError("Factura no encontrada.", 404);
-    if (["VOID", "DRAFT"].includes(invoice.status))
-      throw new AppError(
-        "Emite la factura antes de registrar pagos. Las facturas anuladas no aceptan pagos.",
-      );
-    if (data.currency !== invoice.currency)
-      throw new AppError("El pago debe usar la moneda de la factura.");
-    if (new Date(data.paymentDate) < invoice.date)
-      throw new AppError("El pago no puede preceder a la factura.");
-    const balances = paymentBalance(
-      invoice.total.toString(),
-      invoice.amountPaid.toString(),
-      data.amount,
-    );
-    const payment = await tx.payment.create({
-      data: {
-        ...data,
-        paymentDate: new Date(data.paymentDate),
-        companyId: ctx.companyId,
-      },
-    });
-    await tx.invoice.update({
-      where: { id: invoice.id },
-      data: {
-        ...balances,
-        status: invoiceStatus(
-          invoice.total.toString(),
-          balances.amountPaid,
-          invoice.dueDate,
-        ) as "PAID" | "PARTIALLY_PAID" | "PENDING" | "OVERDUE",
-      },
-    });
-    const receipt = await tx.receipt.create({
-      data: {
-        companyId: ctx.companyId,
-        paymentId: payment.id,
-        invoiceId: invoice.id,
-        documentNumber: await nextNumber(tx, ctx.companyId, "receipt"),
-        balanceRemaining: balances.balanceDue,
-      },
-    });
-    await audit(tx, ctx, "Payment", payment.id, "PAYMENT_CREATED", {
-      invoiceId: invoice.id,
-      amount: data.amount,
-      receiptId: receipt.id,
-    });
-    return { ...payment, receipt };
+  return transaction((tx) => createPaymentTx(tx, ctx, data));
+}
+export async function createPaymentTx(
+  tx: Tx,
+  ctx: Context,
+  data: z.infer<typeof paymentSchema>,
+) {
+  const invoice = await tx.invoice.findFirst({
+    where: { id: data.invoiceId, companyId: ctx.companyId },
   });
+  if (!invoice) throw new AppError("Factura no encontrada.", 404);
+  if (["VOID", "DRAFT"].includes(invoice.status))
+    throw new AppError(
+      "Emite la factura antes de registrar pagos. Las facturas anuladas no aceptan pagos.",
+    );
+  if (data.currency !== invoice.currency)
+    throw new AppError("El pago debe usar la moneda de la factura.");
+  if (new Date(data.paymentDate) < invoice.date)
+    throw new AppError("El pago no puede preceder a la factura.");
+  const { requestId, ...values } = data;
+  if (requestId) {
+    const log = await tx.auditLog.findFirst({
+      where: {
+        companyId: ctx.companyId,
+        entityType: "Payment",
+        action: "PAYMENT_CREATED",
+        metadata: { path: ["requestId"], equals: requestId },
+      },
+    });
+    if (log) {
+      const previous = await tx.payment.findFirstOrThrow({
+        where: { id: log.entityId, companyId: ctx.companyId },
+        include: { receipt: true },
+      });
+      if (
+        previous.invoiceId !== data.invoiceId ||
+        !previous.amount.equals(data.amount) ||
+        previous.method !== data.method ||
+        previous.currency !== data.currency ||
+        previous.paymentDate.toISOString().slice(0, 10) !== data.paymentDate ||
+        previous.reference !== data.reference ||
+        previous.notes !== data.notes ||
+        previous.account !== data.account
+      )
+        throw new AppError("Este pago ya se registró con otros datos.", 409);
+      if (!previous.receipt)
+        throw new AppError("El pago existe pero falta su recibo.", 409);
+      return { ...previous, receipt: previous.receipt };
+    }
+  }
+  const balances = paymentBalance(
+    invoice.total.toString(),
+    invoice.amountPaid.toString(),
+    data.amount,
+  );
+  const payment = await tx.payment.create({
+    data: {
+      ...values,
+      paymentDate: new Date(data.paymentDate),
+      companyId: ctx.companyId,
+    },
+  });
+  await tx.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      ...balances,
+      status: invoiceStatus(
+        invoice.total.toString(),
+        balances.amountPaid,
+        invoice.dueDate,
+      ) as "PAID" | "PARTIALLY_PAID" | "PENDING" | "OVERDUE",
+    },
+  });
+  const receipt = await tx.receipt.create({
+    data: {
+      companyId: ctx.companyId,
+      paymentId: payment.id,
+      invoiceId: invoice.id,
+      documentNumber: await nextNumber(tx, ctx.companyId, "receipt"),
+      balanceRemaining: balances.balanceDue,
+    },
+  });
+  await audit(tx, ctx, "Payment", payment.id, "PAYMENT_CREATED", {
+    ...(requestId ? { requestId } : {}),
+    invoiceId: invoice.id,
+    amount: data.amount,
+    receiptId: receipt.id,
+  });
+  return { ...payment, receipt };
 }
 export async function deletePayment(ctx: Context, id: string) {
   authorize(ctx);
@@ -687,4 +767,50 @@ export async function updateMembership(
     await audit(tx, ctx, "User", id, "USER_UPDATED", data);
     return { id };
   });
+}
+
+export async function applyInvoiceStock(
+  tx: Tx,
+  ctx: Context,
+  invoiceId: string,
+  direction: -1 | 1,
+) {
+  const items = await tx.invoiceItem.findMany({
+    where: { invoiceId, companyId: ctx.companyId },
+    include: { product: true },
+  });
+  const quantities = new Map<string, number>();
+  for (const item of items) {
+    if (!item.product || item.product.type !== "PRODUCT") continue;
+    const quantity = Number(item.quantity);
+    if (!Number.isSafeInteger(quantity))
+      throw new AppError("Los cosméticos se venden en unidades enteras.");
+    quantities.set(
+      item.product.id,
+      (quantities.get(item.product.id) || 0) + quantity,
+    );
+  }
+  for (const [productId, quantity] of quantities) {
+    const product = await tx.product.findFirstOrThrow({
+      where: { id: productId, companyId: ctx.companyId },
+    });
+    if (direction === -1 && product.stock < quantity)
+      throw new AppError(
+        `No hay suficientes unidades de ${product.name}. Disponibles: ${product.stock}.`,
+      );
+    if (direction === 1 && product.stock + quantity > 1000000000)
+      throw new AppError("El inventario supera el límite permitido.");
+    const updated = await tx.product.update({
+      where: { id: productId },
+      data: { stock: { increment: direction * quantity } },
+    });
+    await audit(
+      tx,
+      ctx,
+      "Product",
+      productId,
+      direction === -1 ? "STOCK_SOLD" : "STOCK_RETURNED",
+      { invoiceId, quantity: direction * quantity, balance: updated.stock },
+    );
+  }
 }

@@ -129,8 +129,8 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
   };
   return (
     <div className="panel overflow-hidden">
-      <div className="p-4 flex flex-wrap gap-3">
-        <div className="relative grow max-w-sm">
+      <div className="p-5 filter-controls">
+        <div className="relative min-w-0">
           <Search size={15} className="absolute top-3 left-3 text-slate-400" />
           <Input
             className="pl-9"
@@ -146,7 +146,7 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
         {states.length > 0 && (
           <select
             aria-label="Filtrar estado"
-            className="w-40"
+            className="w-full"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
@@ -164,7 +164,7 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
         {(isDocument || isPayment || kind === "products") && (
           <select
             aria-label="Filtrar moneda"
-            className="w-32"
+            className="w-full"
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
           >
@@ -176,7 +176,7 @@ export function DataTable({ rows, kind }: { rows: Row[]; kind: string }) {
         {customers.length > 0 && (
           <select
             aria-label="Filtrar cliente"
-            className="w-44"
+            className="w-full"
             value={customer}
             onChange={(e) => setCustomer(e.target.value)}
           >

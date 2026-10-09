@@ -11,6 +11,10 @@ export type Row = {
   city?: string;
   notes?: string;
   active?: boolean;
+  pricingMode?: "FIXED" | "PER_UNIT";
+  stock?: number;
+  sessions?: number;
+  nextAppointment?: string | null;
   sku?: string;
   category?: string;
   type?: string;
@@ -40,6 +44,8 @@ export type Row = {
   companySnapshot?: Record<string, string>;
   items?: (LineInput & {
     id: string;
+    sessionsTotal?: number;
+    sessionsUsed?: number;
     subtotal: string;
     discount: string;
     tax: string;

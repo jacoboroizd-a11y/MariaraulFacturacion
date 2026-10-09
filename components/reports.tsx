@@ -53,10 +53,10 @@ export function Reports({ data }: { data: Analytics }) {
   ];
   return (
     <div>
-      <div className="panel p-4 flex flex-wrap gap-3 items-center mb-6">
+      <div className="panel p-5 flex flex-wrap gap-3 items-center mb-6">
         <select
           aria-label="Período"
-          className="w-44"
+          className="w-full sm:w-48"
           value={range}
           onChange={(e) => choose(e.target.value)}
         >
@@ -69,7 +69,7 @@ export function Reports({ data }: { data: Analytics }) {
         <Input
           aria-label="Inicio del período"
           type="date"
-          className="w-40"
+          className="w-full sm:w-44"
           value={start}
           onChange={(e) => {
             setStart(e.target.value);
@@ -80,7 +80,7 @@ export function Reports({ data }: { data: Analytics }) {
         <Input
           aria-label="Fin del período"
           type="date"
-          className="w-40"
+          className="w-full sm:w-44"
           value={end}
           min={start}
           onChange={(e) => {

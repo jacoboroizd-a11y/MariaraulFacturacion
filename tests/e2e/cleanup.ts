@@ -10,6 +10,12 @@ export async function cleanupCustomer(name: string) {
       select: { id: true },
     });
     const invoiceIds = invoices.map((i) => i.id);
+    const itemIds = (
+      await tx.invoiceItem.findMany({
+        where: { invoiceId: { in: invoiceIds } },
+        select: { id: true },
+      })
+    ).map((i) => i.id);
     const quotes = await tx.quote.findMany({
       where: { customerId: customer.id },
       select: { id: true },
@@ -32,6 +38,7 @@ export async function cleanupCustomer(name: string) {
           in: [
             customer.id,
             ...invoiceIds,
+            ...itemIds,
             ...quoteIds,
             ...payments.map((p) => p.id),
             ...productIds,

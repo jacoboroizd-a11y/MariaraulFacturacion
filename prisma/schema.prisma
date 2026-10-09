@@ -179,6 +179,9 @@ model Product {
   type         ProductType   @default(PRODUCT)
   quoteItems   QuoteItem[]
   invoiceItems InvoiceItem[]
+  pricingMode  String        @default("FIXED")
+  stock        Int           @default(0)
+  sessions     Int           @default(1)
   price        Decimal       @db.Decimal(18, 2)
   currency     Currency      @default(NIO)
   unit         String        @default("unidad")
@@ -249,6 +252,9 @@ model QuoteItem {
 }
 
 model Invoice {
+  nextAppointment  DateTime?
+  checkoutKey      String?
+  checkoutHash     String?
   id               String        @id @default(cuid())
   companyId        String
   company          Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -281,6 +287,8 @@ model Invoice {
 
   @@unique([id, companyId])
   @@unique([companyId, documentNumber])
+  @@unique([companyId, checkoutKey])
+  @@index([companyId, nextAppointment])
   @@unique([quoteId, companyId])
   @@index([companyId, status, date])
   @@index([companyId, createdAt])
@@ -289,6 +297,8 @@ model Invoice {
 }
 
 model InvoiceItem {
+  sessionsTotal Int     @default(0)
+  sessionsUsed  Int     @default(0)
   id           String   @id @default(cuid())
   invoiceId    String
   companyId    String

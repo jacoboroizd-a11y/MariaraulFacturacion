@@ -33,18 +33,28 @@ export const customerSchema = z.object({
   notes: text,
   active: z.boolean().default(true),
 });
-export const productSchema = z.object({
-  sku: name,
-  name,
-  description: text,
-  category: text,
-  type: z.enum(["PRODUCT", "SERVICE"]).default("PRODUCT"),
-  price: money,
-  currency: z.enum(["NIO", "USD"]).default("NIO"),
-  unit: name.default("unidad"),
-  taxId: z.string().nullable().optional(),
-  active: z.boolean().default(true),
-});
+export const productSchema = z
+  .object({
+    sku: name,
+    name,
+    description: text,
+    category: text,
+    type: z.enum(["PRODUCT", "SERVICE"]).default("PRODUCT"),
+    pricingMode: z.enum(["FIXED", "PER_UNIT"]).default("FIXED"),
+    stock: z.coerce.number().int().min(0).max(1000000000).optional(),
+    sessions: z.coerce.number().int().min(1).max(100).default(1),
+    price: money,
+    currency: z.enum(["NIO", "USD"]).default("NIO"),
+    unit: name.default("unidad"),
+    taxId: z.string().nullable().optional(),
+    active: z.boolean().default(true),
+  })
+  .refine(
+    (p) =>
+      p.pricingMode !== "PER_UNIT" ||
+      (p.type === "SERVICE" && p.sessions === 1),
+    "El cobro por unidad requiere un tratamiento individual, no un cosmético o paquete.",
+  );
 export const taxSchema = z.object({
   name,
   rate,
@@ -81,6 +91,7 @@ export const documentSchema = z
     "El vencimiento no puede preceder a la fecha.",
   );
 export const paymentSchema = z.object({
+  requestId: z.uuid().optional(),
   invoiceId: name,
   amount: money.refine((v) => Number(v) > 0),
   currency: z.enum(["NIO", "USD"]),

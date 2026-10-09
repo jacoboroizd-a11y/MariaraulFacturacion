@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
+  Sparkles,
+  CalendarDays,
   FileText,
   ReceiptText,
   CreditCard,
@@ -23,15 +25,20 @@ import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import type { Context } from "@/server/auth";
 const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/sales", label: "Nueva venta", icon: Sparkles },
+  { href: "/invoices", label: "Ventas y abonos", icon: ReceiptText },
+  { href: "/sessions", label: "Sesiones y citas", icon: CalendarDays },
+  { href: "/customers", label: "Clientes", icon: Users },
+  { href: "/inventory", label: "Inventario", icon: Package },
+  { href: "/products", label: "Tratamientos y cosméticos", icon: Package },
+];
+const moreNav = [
+  { href: "/dashboard", label: "Resumen", icon: LayoutDashboard },
   { href: "/quotes", label: "Cotizaciones", icon: FileText },
-  { href: "/invoices", label: "Facturas", icon: ReceiptText },
   { href: "/payments", label: "Pagos", icon: CreditCard },
   { href: "/receipts", label: "Recibos", icon: ReceiptText },
-  { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/products", label: "Productos y servicios", icon: Package },
   { href: "/reports", label: "Reportes", icon: BarChart3 },
-  { href: "/settings", label: "Configuración", icon: Settings },
+  { href: "/settings", label: "Administración", icon: Settings },
 ];
 export function Shell({
   ctx,
@@ -70,7 +77,7 @@ export function Shell({
     <div className="min-h-screen">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 w-60 bg-white border-r border-slate-200 z-40 flex flex-col transition-transform",
+          "fixed inset-y-0 left-0 w-60 glass-nav border-r border-slate-200 z-40 flex flex-col transition-transform",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
@@ -96,32 +103,54 @@ export function Shell({
           </div>
           <ChevronDown size={13} className="ml-auto text-slate-400" />
         </div>
-        <nav className="px-3 space-y-1">
-          {nav.map((n, i) => (
-            <div key={n.href}>
-              {i === 1 && (
-                <p className="text-[10px] tracking-wider text-slate-400 px-3 pt-5 pb-2">
-                  VENTAS
-                </p>
-              )}
-              {i === 5 && <div className="my-4 border-t border-slate-100" />}
-              {(n.href != "/settings" || ctx.role === "ADMIN") && (
+        <nav className="px-3 space-y-1 overflow-y-auto">
+          {nav
+            .filter((n) => n.href !== "/sales" || ctx.role !== "VIEWER")
+            .map((n) => (
+              <div key={n.href}>
+                {(n.href != "/settings" || ctx.role === "ADMIN") && (
+                  <Link
+                    onClick={() => setOpen(false)}
+                    href={n.href}
+                    className={cn(
+                      "flex gap-3 items-center px-3 py-3 rounded-xl text-[13px]",
+                      pathname.startsWith(n.href)
+                        ? "bg-emerald-100/70 text-emerald-900 font-semibold shadow-sm"
+                        : "text-slate-500 hover:bg-slate-50",
+                    )}
+                  >
+                    <n.icon size={17} />
+                    {n.label}
+                  </Link>
+                )}
+              </div>
+            ))}
+          <details
+            className="pt-4"
+            open={moreNav.some((n) => pathname.startsWith(n.href))}
+          >
+            <summary className="cursor-pointer px-3 py-2 text-xs text-slate-500">
+              Más opciones
+            </summary>
+            {moreNav
+              .filter((n) => n.href !== "/settings" || ctx.role === "ADMIN")
+              .map((n) => (
                 <Link
-                  onClick={() => setOpen(false)}
+                  key={n.href}
                   href={n.href}
+                  onClick={() => setOpen(false)}
                   className={cn(
-                    "flex gap-3 items-center px-3 py-2.5 rounded-lg text-[13px]",
+                    "flex gap-3 items-center px-3 py-3 rounded-xl text-[13px]",
                     pathname.startsWith(n.href)
-                      ? "bg-emerald-50 text-emerald-800 font-semibold"
+                      ? "bg-emerald-100/70 text-emerald-900 font-semibold shadow-sm"
                       : "text-slate-500 hover:bg-slate-50",
                   )}
                 >
                   <n.icon size={17} />
                   {n.label}
                 </Link>
-              )}
-            </div>
-          ))}
+              ))}
+          </details>
         </nav>
         <div className="mt-auto p-4">
           <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 flex gap-2 items-center">
@@ -153,7 +182,7 @@ export function Shell({
         />
       )}
       <div className="lg:ml-60">
-        <header className="h-18 bg-white border-b border-slate-200 flex items-center justify-between gap-4 px-6 lg:px-9">
+        <header className="h-18 glass-nav border-b border-slate-200 flex items-center justify-between gap-4 px-6 lg:px-9">
           <button
             onClick={() => setOpen(true)}
             aria-label="Abrir menú"
@@ -197,9 +226,9 @@ export function Shell({
           <div className="flex items-center gap-3 shrink-0">
             {ctx.role !== "VIEWER" && (
               <Button size="sm" asChild>
-                <Link href="/invoices/new">
+                <Link href="/sales">
                   <Plus size={14} />
-                  <span className="hidden sm:inline">Nueva factura</span>
+                  <span className="hidden sm:inline">Nueva venta</span>
                 </Link>
               </Button>
             )}

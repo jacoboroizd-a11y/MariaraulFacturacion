@@ -121,6 +121,7 @@ async function main() {
     products.push(
       await saveProduct(ctx, {
         name: productNames[i],
+        stock: i >= 10 ? 0 : 100,
         sku: `SKU-${String(i + 1).padStart(3, "0")}`,
         description: productNames[i],
         type: i >= 10 ? "SERVICE" : "PRODUCT",

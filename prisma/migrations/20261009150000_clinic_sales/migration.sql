@@ -1,0 +1,11 @@
+ALTER TABLE "Product" ADD COLUMN "sessions" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "Product" ADD CONSTRAINT "product_sessions_valid" CHECK ("sessions" BETWEEN 1 AND 100);
+ALTER TABLE "Invoice" ADD COLUMN "nextAppointment" TIMESTAMP(3), ADD COLUMN "checkoutKey" TEXT, ADD COLUMN "checkoutHash" TEXT;
+CREATE UNIQUE INDEX "Invoice_companyId_checkoutKey_key" ON "Invoice"("companyId", "checkoutKey");
+CREATE INDEX "Invoice_companyId_nextAppointment_idx" ON "Invoice"("companyId", "nextAppointment");
+ALTER TABLE "InvoiceItem" ADD COLUMN "sessionsTotal" INTEGER NOT NULL DEFAULT 0, ADD COLUMN "sessionsUsed" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "InvoiceItem" ADD CONSTRAINT "invoice_sessions_valid" CHECK ("sessionsTotal" >= 0 AND "sessionsUsed" >= 0 AND "sessionsUsed" <= "sessionsTotal");
+ALTER TABLE "Product" ADD COLUMN "stock" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Product" ADD CONSTRAINT "product_stock_valid" CHECK ("stock" BETWEEN 0 AND 1000000000);
+ALTER TABLE "Product" ADD COLUMN "pricingMode" TEXT NOT NULL DEFAULT 'FIXED';
+ALTER TABLE "Product" ADD CONSTRAINT "product_pricing_mode_valid" CHECK ("pricingMode" IN ('FIXED', 'PER_UNIT') AND ("pricingMode" = 'FIXED' OR ("type" = 'SERVICE' AND "sessions" = 1)));

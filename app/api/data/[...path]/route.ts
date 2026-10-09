@@ -16,6 +16,13 @@ import {
   createUser,
   updateMembership,
 } from "@/server/domain";
+import {
+  createClinicSale,
+  recordSession,
+  changeAppointment,
+  adjustStock,
+} from "@/server/clinic";
+import { importCatalog } from "@/server/catalog-import";
 type Params = { params: Promise<{ path: string[] }> };
 function failure(e: unknown) {
   if (e instanceof AppError)
@@ -78,7 +85,17 @@ async function mutate(request: Request, { params }: Params) {
       else if (kind === "customers" || kind === "products" || kind === "taxes")
         result = await deleteEntity(ctx, kind, id);
       else throw new AppError("Acción no válida.");
-    } else if (action && (kind === "quotes" || kind === "invoices"))
+    } else if (kind === "sales" && !id && request.method === "POST")
+      result = await createClinicSale(ctx, input);
+    else if (kind === "sessions" && id && request.method === "POST")
+      result = await recordSession(ctx, id, input);
+    else if (kind === "catalog-import" && !id && request.method === "POST")
+      result = await importCatalog(ctx, input);
+    else if (kind === "inventory" && id && request.method === "POST")
+      result = await adjustStock(ctx, id, input);
+    else if (kind === "appointments" && id && request.method === "PUT")
+      result = await changeAppointment(ctx, id, input);
+    else if (action && (kind === "quotes" || kind === "invoices"))
       result = await documentAction(ctx, kind, id, action);
     else if (kind === "customers") result = await saveCustomer(ctx, input, id);
     else if (kind === "products") result = await saveProduct(ctx, input, id);
