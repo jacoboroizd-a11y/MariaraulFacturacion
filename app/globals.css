@@ -183,3 +183,50 @@
     backdrop-filter: none;
   }
 }
+
+@page clinic-note {
+  size: letter portrait;
+  margin: 12mm;
+}
+@page clinic-quote {
+  size: letter portrait;
+  margin: 15mm;
+}
+@media print {
+  .print-note {
+    page: clinic-note;
+  }
+  .print-quote {
+    page: clinic-quote;
+  }
+  .print-document {
+    padding: 0 !important;
+    width: 100%;
+    font-size: 9pt;
+  }
+  .print-document table {
+    font-size: 8pt;
+  }
+  .print-document th,
+  .print-document td {
+    padding: 7pt 4pt;
+  }
+  .print-document tr {
+    break-inside: avoid;
+  }
+  .print-document thead {
+    display: table-header-group;
+  }
+  .print-document .py-7 {
+    padding-block: 12pt;
+  }
+  .print-document .pb-8 {
+    padding-bottom: 16pt;
+  }
+  .print-document h2 {
+    font-size: 15pt;
+  }
+  .print-document .grid.sm\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -11,17 +11,22 @@ import { formatMoney, convertCurrency } from "@/lib/money";
 import { dateLabel, labels, appointmentLabel } from "@/lib/utils";
 import type { Row } from "@/types/view";
 const styles = StyleSheet.create({
-  page: { padding: 40, fontFamily: "Helvetica", fontSize: 9, color: "#243c35" },
+  page: {
+    padding: 36,
+    fontFamily: "Helvetica",
+    fontSize: 10,
+    color: "#243c35",
+  },
   row: { flexDirection: "row", justifyContent: "space-between" },
   header: {
     borderBottomWidth: 1,
     borderBottomColor: "#d9e2de",
-    paddingBottom: 22,
-    marginBottom: 22,
+    paddingBottom: 16,
+    marginBottom: 16,
   },
   muted: { color: "#6b7c75", fontSize: 8, lineHeight: 1.5 },
-  title: { fontSize: 23, fontFamily: "Helvetica-Bold", marginBottom: 8 },
-  company: { fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 8 },
+  title: { fontSize: 22, fontFamily: "Helvetica-Bold", marginBottom: 8 },
+  company: { fontSize: 13, fontFamily: "Helvetica-Bold", marginBottom: 8 },
   table: { marginTop: 20 },
   tableHeader: {
     flexDirection: "row",
@@ -52,12 +57,12 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     marginTop: 5,
   },
-  section: { marginTop: 22 },
+  section: { marginTop: 16 },
   footer: {
     position: "absolute",
     bottom: 22,
-    left: 40,
-    right: 40,
+    left: 36,
+    right: 36,
     color: "#8a9a92",
     fontSize: 7,
     flexDirection: "row",
@@ -77,9 +82,20 @@ export async function pdfDocument(row: Row, kind: string) {
   const customer = doc.customerSnapshot || {};
   const currency = doc.currency || "NIO";
   const fmt = company.dateFormat || "dd/MM/yyyy";
+  const hasTax = doc.items?.some((i) => Number(i.tax) !== 0) || false;
+  const hasDiscount = doc.items?.some((i) => Number(i.discount) !== 0) || false;
+  const extra = Number(hasTax) + Number(hasDiscount);
+  const descriptionStyle = {
+    ...styles.description,
+    width: extra ? "33%" : "44%",
+  };
+  const cellStyle = {
+    ...styles.cell,
+    width: `${(extra ? 67 : 56) / (3 + extra)}%`,
+  };
   return renderToBuffer(
     <Document title={row.documentNumber} author={company.name}>
-      <Page size="A4" style={styles.page}>
+      <Page size="LETTER" style={styles.page}>
         <View style={[styles.row, styles.header]}>
           <View style={{ maxWidth: "60%" }}>
             {company.logo && (
@@ -94,7 +110,7 @@ export async function pdfDocument(row: Row, kind: string) {
               {"\n"}
               {company.address}
               {"\n"}
-              {company.email} · {company.phone}
+              {[company.email, company.phone].filter(Boolean).join(" · ")}
             </Text>
           </View>
           <View style={{ textAlign: "right" }}>
@@ -119,11 +135,13 @@ export async function pdfDocument(row: Row, kind: string) {
               {customer.legalName || customer.name}
             </Text>
             <Text style={styles.muted}>
-              RUC / Cédula: {customer.ruc}
-              {"\n"}
-              {customer.address}
-              {"\n"}
-              {customer.email} · {customer.phone}
+              {[
+                customer.ruc ? `RUC / Cédula: ${customer.ruc}` : "",
+                customer.address,
+                [customer.email, customer.phone].filter(Boolean).join(" · "),
+              ]
+                .filter(Boolean)
+                .join("\n")}
             </Text>
           </View>
           <View style={{ textAlign: "right" }}>
@@ -173,30 +191,38 @@ export async function pdfDocument(row: Row, kind: string) {
           <>
             <View style={styles.table}>
               <View style={styles.tableHeader} fixed>
-                <Text style={styles.description}>Descripción</Text>
-                {["Cantidad", "Precio", "Descuento", "Impuesto", "Total"].map(
-                  (x) => (
-                    <Text key={x} style={styles.cell}>
-                      {x}
-                    </Text>
-                  ),
-                )}
+                <Text style={descriptionStyle}>Descripción</Text>
+                {[
+                  "Cant.",
+                  "Precio",
+                  ...(hasDiscount ? ["Descuento"] : []),
+                  ...(hasTax ? ["Impuesto"] : []),
+                  "Total",
+                ].map((x) => (
+                  <Text key={x} style={cellStyle}>
+                    {x}
+                  </Text>
+                ))}
               </View>
               {doc.items?.map((item) => (
                 <View style={styles.tableRow} key={item.id} wrap={false}>
-                  <Text style={styles.description}>{item.description}</Text>
-                  <Text style={styles.cell}>{item.quantity}</Text>
-                  <Text style={styles.cell}>
+                  <Text style={descriptionStyle}>{item.description}</Text>
+                  <Text style={cellStyle}>{item.quantity}</Text>
+                  <Text style={cellStyle}>
                     {formatMoney(item.unitPrice, currency)}
                   </Text>
-                  <Text style={styles.cell}>
-                    {formatMoney(item.discount, currency)}
-                  </Text>
-                  <Text style={styles.cell}>
-                    {formatMoney(item.tax, currency)}
-                    {"\n"}({item.taxRate}%)
-                  </Text>
-                  <Text style={styles.cell}>
+                  {hasDiscount && (
+                    <Text style={cellStyle}>
+                      {formatMoney(item.discount, currency)}
+                    </Text>
+                  )}
+                  {hasTax && (
+                    <Text style={cellStyle}>
+                      {formatMoney(item.tax, currency)}
+                      {"\n"}({item.taxRate}%)
+                    </Text>
+                  )}
+                  <Text style={cellStyle}>
                     {formatMoney(item.total, currency)}
                   </Text>
                 </View>
@@ -207,12 +233,14 @@ export async function pdfDocument(row: Row, kind: string) {
                 { label: "Subtotal", value: doc.subtotal },
                 { label: "Descuentos", value: doc.discountTotal },
                 { label: "Impuestos", value: doc.taxTotal },
-              ].map((x) => (
-                <View key={x.label} style={styles.summaryRow}>
-                  <Text>{x.label}</Text>
-                  <Text>{formatMoney(x.value || 0, currency)}</Text>
-                </View>
-              ))}
+              ]
+                .filter((x) => x.label === "Subtotal" || Number(x.value))
+                .map((x) => (
+                  <View key={x.label} style={styles.summaryRow}>
+                    <Text>{x.label}</Text>
+                    <Text>{formatMoney(x.value || 0, currency)}</Text>
+                  </View>
+                ))}
               <View style={[styles.summaryRow, styles.total]}>
                 <Text>Total</Text>
                 <Text>{formatMoney(doc.total || 0, currency)}</Text>

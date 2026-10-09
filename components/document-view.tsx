@@ -10,8 +10,12 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
   const customer = doc.customerSnapshot || {};
   const currency = doc.currency;
   const fmt = company.dateFormat || "dd/MM/yyyy";
+  const hasTax = doc.items?.some((i) => Number(i.tax) !== 0);
+  const hasDiscount = doc.items?.some((i) => Number(i.discount) !== 0);
   return (
-    <div className="panel p-6 md:p-10 max-w-5xl mx-auto">
+    <div
+      className={`panel p-6 md:p-10 max-w-5xl mx-auto print-document ${kind === "quotes" ? "print-quote" : "print-note"}`}
+    >
       <div className="flex justify-between gap-5 border-b border-slate-100 pb-8">
         <div>
           {company.logo && (
@@ -33,7 +37,7 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
           </p>
           <p className="text-xs text-slate-500 mt-1">{company.address}</p>
           <p className="text-xs text-slate-500 mt-1">
-            {company.email} · {company.phone}
+            {[company.email, company.phone].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="text-right">
@@ -63,7 +67,7 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
           <p className="text-xs text-slate-500 mt-2">{customer.ruc}</p>
           <p className="text-xs text-slate-500 mt-1">{customer.address}</p>
           <p className="text-xs text-slate-500 mt-1">
-            {customer.email} · {customer.phone}
+            {[customer.email, customer.phone].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="text-sm sm:text-right space-y-2">
@@ -118,8 +122,8 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
                   <th>Descripción</th>
                   <th>Cantidad</th>
                   <th>Precio</th>
-                  <th>Descuento</th>
-                  <th>Impuesto</th>
+                  {hasDiscount && <th>Descuento</th>}
+                  {hasTax && <th>Impuesto</th>}
                   <th>Total</th>
                 </tr>
               </thead>
@@ -129,11 +133,15 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
                     <td>{i.description}</td>
                     <td>{i.quantity}</td>
                     <td>{formatMoney(i.unitPrice, currency)}</td>
-                    <td>{formatMoney(i.discount, currency)}</td>
-                    <td>
-                      {formatMoney(i.tax, currency)}
-                      <p className="text-xs text-slate-400">{i.taxRate}%</p>
-                    </td>
+                    {hasDiscount && (
+                      <td>{formatMoney(i.discount, currency)}</td>
+                    )}
+                    {hasTax && (
+                      <td>
+                        {formatMoney(i.tax, currency)}
+                        <p className="text-xs text-slate-400">{i.taxRate}%</p>
+                      </td>
+                    )}
                     <td className="font-medium">
                       {formatMoney(i.total, currency)}
                     </td>
@@ -147,15 +155,17 @@ export function DocumentView({ row, kind }: { row: Row; kind: string }) {
               { label: "Subtotal", value: doc.subtotal },
               { label: "Descuentos", value: doc.discountTotal },
               { label: "Impuestos", value: doc.taxTotal },
-            ].map((x) => (
-              <div
-                className="flex justify-between text-slate-500"
-                key={x.label}
-              >
-                <span>{x.label}</span>
-                <span>{formatMoney(x.value || 0, currency)}</span>
-              </div>
-            ))}
+            ]
+              .filter((x) => x.label === "Subtotal" || Number(x.value))
+              .map((x) => (
+                <div
+                  className="flex justify-between text-slate-500"
+                  key={x.label}
+                >
+                  <span>{x.label}</span>
+                  <span>{formatMoney(x.value || 0, currency)}</span>
+                </div>
+              ))}
             <div className="flex justify-between border-t border-slate-200 pt-4 text-xl font-semibold">
               <span>Total</span>
               <span>{formatMoney(doc.total || 0, currency)}</span>

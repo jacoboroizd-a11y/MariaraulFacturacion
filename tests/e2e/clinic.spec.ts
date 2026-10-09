@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { cleanupCustomer } from "./cleanup";
@@ -196,6 +197,10 @@ test("venta clínica: cliente automático, paquete, abono, cita e impresión", a
     const pdf = await page.request.get(`/api/pdf/invoices/${invoiceId}`);
     expect(pdf.status()).toBe(200);
     expect((await pdf.body()).subarray(0, 4).toString()).toBe("%PDF");
+    await writeFile(
+      "/workspace/.cloud/clinic-invoice-letter.pdf",
+      await pdf.body(),
+    );
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: "/workspace/.cloud/clinic-invoice.png",
